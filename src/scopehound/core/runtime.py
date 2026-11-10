@@ -17,7 +17,9 @@ from ..agent.graph import build_graph
 from ..agent.llm import LlmConfig, build_chat_model
 from ..config import Settings
 from ..guardrails import AuditEvent, Budget, Egress, KillSwitch, RateLimiter, Resolver, Scope
+from ..oob import OobRegistry
 from ..policy import Decision
+from ..redact import Redactor
 from ..secrets import SecretBox, load_secret_key
 from ..skills import load_skills
 from ..store import (
@@ -59,6 +61,7 @@ class Runtime:
         self._kill: dict[str, KillSwitch] = {}
         self._limiters: dict[str, RateLimiter] = {}
         self.task_caps: dict[str, tuple[int, int]] = {}
+        self.oob = OobRegistry()
         self._stack = AsyncExitStack()
 
     async def __aenter__(self) -> Runtime:
@@ -134,6 +137,17 @@ class Runtime:
     def traffic(self, project: Project) -> TrafficStore:
         return TrafficStore(self.db, project.id, Scope.model_validate(project.scope))
 
+    def oob_base(self) -> str:
+        s = self.settings
+        return s.oob_base_url.rstrip("/") or f"http://{s.host}:{s.port}"
+
+    def redactor(self, project: Project) -> Redactor:
+        policy = self.settings.redact
+        if policy == "auto":
+            # mascara tudo quando o modelo não roda na máquina do usuário
+            return Redactor.from_policy("all" if not self.llm_config(project).is_local else "off")
+        return Redactor.from_policy(policy)
+
     def kill_switch(self, project: Project) -> KillSwitch:
         ks = self._kill.get(project.id)
         if ks is None:
@@ -194,6 +208,15 @@ class Runtime:
                 return await self.spawn_subagent(project.id, task_id, **kw)
 
             source_root = Path(project.source_root) if project.source_root else None
+
+            def oob_new() -> tuple[str, str]:
+                token = self.oob.new_token(project.id)
+                return token, f"{self.oob_base()}/oob/{token}"
+
+            def oob_poll(token: str):
+                hits = self.oob.poll(token, project.id)
+                return None if hits is None else [h.to_json() for h in hits]
+
             yield ToolContext(
                 project.id,
                 task_id,
@@ -202,9 +225,17 @@ class Runtime:
                 confirm_lead,
                 traffic,
                 get_session=get_session,
+                redactor=self.redactor(project),
                 library=self.library,
                 source_root=source_root,
                 spawn=spawn,
+                scope=scope,
+                external_enabled=s.enable_external_tools,
+                external_timeout=s.external_tool_timeout,
+                dry_run_external=s.dry_run_external,
+                bins={"nuclei": s.nuclei_bin, "ffuf": s.ffuf_bin, "sqlmap": s.sqlmap_bin},
+                oob_new=oob_new,
+                oob_poll=oob_poll,
             )
         finally:
             await egress.aclose()

@@ -30,6 +30,10 @@ scopehound = "scopehound.cli:app"
 proxy = [
     "mitmproxy>=12.3.1",
 ]
+server = [
+    "psycopg[binary]>=3.3.8",
+    "pyjwt>=2.15.1",
+]
 
 [dependency-groups]
 dev = [

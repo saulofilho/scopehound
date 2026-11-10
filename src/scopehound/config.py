@@ -41,12 +41,31 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_api_key: SecretStr | None = None
     llm_temperature: float = 0.1
+    # Mascaramento do que o LLM vê: "auto" (mascara tudo quando o LLM não é
+    # local), "off", "on", ou lista de categorias (headers,email,card,jwt,...).
+    redact: str = "auto"
 
     # Orçamento padrão por tarefa
     task_max_steps: int = 30
     task_max_requests: int = 200
     task_max_tokens: int = 500_000
     skill_dirs: list[Path] = []
+
+    # ferramentas externas (segundo portão, desligado por padrão)
+    enable_external_tools: bool = False
+    external_tool_timeout: float = 120.0
+    dry_run_external: bool = False
+    nuclei_bin: str = "nuclei"
+    ffuf_bin: str = "ffuf"
+    sqlmap_bin: str = "sqlmap"
+
+    # listener OOB: URL externa pela qual o alvo alcança /oob/<token>
+    oob_base_url: str = ""
+
+    # OIDC (modo servidor)
+    oidc_issuer: str = ""
+    oidc_audience: str = ""
+    oidc_jwks_url: str = ""
 
     def effective_internal_deny(self) -> list[str]:
         if self.internal_deny_cidrs is not None:

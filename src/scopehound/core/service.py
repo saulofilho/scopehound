@@ -450,3 +450,11 @@ async def list_subtasks(rt: Runtime, parent_id: str):
                 _select(_Task).where(_Task.parent_id == parent_id).order_by(_Task.created_at)
             )
         )
+
+
+# ---- modo CI -------------------------------------------------------------
+async def run_ci(rt: Runtime, project_id: str, *, goal: str, mode: str = "autonomous") -> Task:
+    """Roda uma tarefa /goal até o fim (uso não interativo). Em CI, use o modo
+    autônomo e aprovações desligadas (nenhuma ferramenta always_ask habilitada)."""
+    prompt = goal if goal.strip().startswith("/goal ") else f"/goal {goal}"
+    return await create_task(rt, project_id, prompt=prompt, mode=mode, wait=True)

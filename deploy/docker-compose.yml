@@ -1,0 +1,42 @@
+# scopehound em modo servidor. Preencha deploy/.env antes de subir.
+# ATENÇÃO: só exponha atrás de uma rede confiável e com OIDC configurado.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: scopehound
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina no .env}
+      POSTGRES_DB: scopehound
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scopehound"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SCOPEHOUND_MODE: server
+      SCOPEHOUND_DATABASE_URL: postgresql+asyncpg://scopehound:${POSTGRES_PASSWORD}@db:5432/scopehound
+      SCOPEHOUND_SECRET_KEY: ${SCOPEHOUND_SECRET_KEY:?gere com 'python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"'}
+      SCOPEHOUND_OIDC_ISSUER: ${SCOPEHOUND_OIDC_ISSUER}
+      SCOPEHOUND_OIDC_AUDIENCE: ${SCOPEHOUND_OIDC_AUDIENCE}
+      SCOPEHOUND_OIDC_JWKS_URL: ${SCOPEHOUND_OIDC_JWKS_URL}
+      SCOPEHOUND_LLM_BASE_URL: ${SCOPEHOUND_LLM_BASE_URL:-http://ollama:11434/v1}
+      SCOPEHOUND_LLM_MODEL: ${SCOPEHOUND_LLM_MODEL:-qwen3:8b}
+      SCOPEHOUND_OOB_BASE_URL: ${SCOPEHOUND_OOB_BASE_URL}
+      # redes internas bloqueadas por padrão no modo servidor (anti-SSRF);
+      # a do cluster também não pode ser liberada por nenhum projeto:
+      SCOPEHOUND_HARD_DENY_CIDRS: '["10.0.0.0/8","172.16.0.0/12"]'
+    ports:
+      - "127.0.0.1:8787:8787"
+
+volumes:
+  pgdata:

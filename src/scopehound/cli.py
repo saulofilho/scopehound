@@ -75,7 +75,17 @@ def serve(
     host = host or settings.host
     if settings.mode == "local" and host not in ("127.0.0.1", "localhost", "::1"):
         _fail("no modo local a API só escuta em 127.0.0.1 (ainda não há autenticação)")
-    uvicorn.run(create_app(Runtime(settings)), host=host, port=port or settings.port)
+    auth = None
+    if settings.mode == "server":
+        from .api.auth import AuthContext, build_oidc_verifier
+
+        if not (settings.oidc_issuer and settings.oidc_audience and settings.oidc_jwks_url):
+            _fail("modo servidor exige SCOPEHOUND_OIDC_ISSUER, _AUDIENCE e _JWKS_URL")
+        verifier = build_oidc_verifier(
+            settings.oidc_issuer, settings.oidc_audience, settings.oidc_jwks_url
+        )
+        auth = AuthContext(mode="server", verifier=verifier)
+    uvicorn.run(create_app(Runtime(settings), auth=auth), host=host, port=port or settings.port)
 
 
 def _with_runtime(fn):
@@ -317,6 +327,48 @@ def project_source(
 
     p = _with_runtime(run)
     typer.echo(f"source_root de {p.name}: {p.source_root or '(nenhum)'}")
+
+
+@app.command()
+def run(
+    project: str,
+    goal: Annotated[str, typer.Option("--goal", "-g", help="Objetivo a perseguir")],
+    fail_on: Annotated[
+        str, typer.Option("--fail-on", help="Severidade mínima que falha o CI (ex.: high)")
+    ] = "",
+    sarif: Annotated[
+        Path | None, typer.Option("--sarif", help="Escreve SARIF neste arquivo")
+    ] = None,
+    mode: Annotated[str, typer.Option()] = "autonomous",
+) -> None:
+    """Execução não interativa (CI): persegue um objetivo e reporta os achados."""
+    import sys
+
+    from .core import service as svc
+    from .report import max_severity, sarif_json, severity_at_least
+
+    async def go(rt):
+        p = await svc.find_project(rt, project)
+        task = await svc.run_ci(rt, p.id, goal=goal, mode=mode)
+        leads = await svc.list_leads(rt, p.id)
+        return task, leads
+
+    task, leads = _with_runtime(go)
+    confirmed = [lead for lead in leads if lead.status == "confirmed"]
+    typer.echo(f"tarefa {task.status}: {len(leads)} lead(s), {len(confirmed)} confirmado(s)")
+    for lead in leads:
+        typer.echo(f"  [{lead.severity}] {lead.title} ({lead.status}) {lead.url}")
+    if sarif:
+        sarif.write_text(sarif_json(leads), encoding="utf-8")
+        typer.echo(f"SARIF escrito em {sarif}")
+    if task.status == "failed":
+        _fail(f"execução falhou: {task.error}")
+    if fail_on:
+        worst = max_severity(leads)
+        if worst and severity_at_least(worst, fail_on):
+            typer.secho(f"CI: achado {worst} >= {fail_on.upper()}", fg="red")
+            sys.exit(2)
+    typer.secho("CI: ok", fg="green")
 
 
 @app.command()

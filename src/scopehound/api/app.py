@@ -14,13 +14,14 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from ..core import Conflict, NotFound, Runtime
 from ..core import service as svc
 from ..core.serialize import project_dict, row_dict
+from .auth import ACT, ADMIN, READ, AuthContext
 
 
 class ProjectIn(BaseModel):
@@ -80,7 +81,9 @@ class KillIn(BaseModel):
     reason: str = ""
 
 
-def create_app(runtime: Runtime, *, manage_runtime: bool = True) -> FastAPI:
+def create_app(
+    runtime: Runtime, *, manage_runtime: bool = True, auth: AuthContext | None = None
+) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         if manage_runtime:
@@ -93,6 +96,30 @@ def create_app(runtime: Runtime, *, manage_runtime: bool = True) -> FastAPI:
 
     app = FastAPI(title="scopehound", version="0.1.0", lifespan=lifespan)
     rt = runtime
+    auth = auth or AuthContext(mode=runtime.settings.mode)
+
+    # Rotas públicas (sem autenticação): saúde, callbacks OOB, interface.
+    OPEN_PREFIXES = ("/health", "/oob", "/app", "/docs", "/openapi.json", "/redoc")
+    # Rotas que exigem papel de administrador (mudam configuração ou escopo).
+    ADMIN_METHODS_PATHS = ("/llm", "/tools/", "/kill", "/revive", "/source", "/sessions")
+
+    @app.middleware("http")
+    async def enforce_auth(request: Request, call_next):
+        path = request.url.path
+        if path == "/" or any(path.startswith(p) for p in OPEN_PREFIXES):
+            return await call_next(request)
+        try:
+            principal = await auth.principal(request)
+            if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+                level = ADMIN if any(seg in path for seg in ADMIN_METHODS_PATHS) else ACT
+            else:
+                level = READ
+            if not principal.can(level):
+                raise HTTPException(403, f"ação requer papel '{level}'")
+        except HTTPException as exc:
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+        request.state.principal = principal
+        return await call_next(request)
 
     def guard(coro):
         async def wrapper():
@@ -293,6 +320,24 @@ def create_app(runtime: Runtime, *, manage_runtime: bool = True) -> FastAPI:
                     yield f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
 
         return StreamingResponse(stream(), media_type="text/event-stream")
+
+    # listener OOB (equivalente ao Collaborator): registra callbacks do alvo
+    @app.api_route("/oob/{token}", methods=["GET", "POST", "PUT", "HEAD", "OPTIONS"])
+    @app.api_route("/oob/{token}/{rest:path}", methods=["GET", "POST", "PUT", "HEAD", "OPTIONS"])
+    async def oob(token: str, request: Request, rest: str = ""):
+        from ..oob import make_hit
+
+        body = (await request.body()).decode("utf-8", errors="replace")
+        hit = make_hit(
+            method=request.method,
+            path=request.url.path,
+            source_ip=request.client.host if request.client else "?",
+            headers=dict(request.headers),
+            body=body,
+        )
+        rt.oob.record(token, hit)
+        # resposta benigna e constante
+        return {"ok": True}
 
     # interface web (app de página única, sem build; servido pela própria API)
     web_dir = Path(__file__).resolve().parent.parent / "web"

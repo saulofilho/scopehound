@@ -43,7 +43,7 @@ também **em servidor** (time, com login e projetos compartilhados, na Fase 5).
 | 2 | Contexto de tráfego: proxy, importação HAR/Burp, site map | ✅ |
 | 3 | Skills, `/goal` e subagentes | ✅ |
 | 4 | Interface web | ✅ |
-| 5 | Servidor: Docker, Postgres, SSO, listener OOB, ferramentas externas, CI | ⏳ próxima |
+| 5 | Servidor: Docker, Postgres, SSO, listener OOB, ferramentas externas, CI | ✅ |
 
 Plano completo: [docs/PLANO.md](docs/PLANO.md).
 
@@ -418,6 +418,7 @@ Nenhuma destas regras depende do modelo, e nenhum prompt as altera.
 | `scopehound sitemap PROJETO [--host]` | Mostra o site map |
 | `scopehound traffic PROJETO [-t TEXTO] [--limit N]` | Lista o histórico |
 | `scopehound serve [--host] [--port]` | Sobe a API (no modo local, só em 127.0.0.1) |
+| `scopehound run PROJETO --goal G [--fail-on SEV] [--sarif ARQ]` | Execução de CI (SARIF, exit code) |
 | `scopehound version` | Mostra a versão |
 
 ## Referência da API
@@ -451,6 +452,60 @@ Status de tarefa: `idle` · `running` · `waiting_approval` · `done` ·
 > A API ainda não tem autenticação (chega na Fase 5). No modo local ela só
 > escuta em 127.0.0.1; não exponha o modo servidor em rede antes disso.
 
+## Modo servidor e deploy
+
+O mesmo código roda para o time inteiro. `deploy/docker-compose.yml` sobe a
+API com Postgres; preencha `deploy/.env` (veja `deploy/.env.example`).
+
+```bash
+cp deploy/.env.example deploy/.env   # senha do banco, SECRET_KEY, OIDC, LLM
+docker compose -f deploy/docker-compose.yml up --build
+```
+
+Diferenças do modo servidor (`SCOPEHOUND_MODE=server`):
+
+- **Autenticação (OIDC):** cada requisição traz um Bearer JWT, validado contra
+  o JWKS do provedor (Keycloak, Okta, Google Workspace…). Papéis por nível:
+  `viewer` (lê), `tester` (cria tarefas e age) e `admin` (muda escopo, LLM,
+  ferramentas, kill switch). O papel vem da claim `scopehound_role`/`role`.
+- **Rede interna bloqueada:** redes privadas e metadados de nuvem ficam
+  bloqueados por padrão (anti-SSRF). `SCOPEHOUND_HARD_DENY_CIDRS` define faixas
+  que **nenhum projeto** pode liberar, como a rede do cluster.
+- **Postgres** no lugar do SQLite; **SECRET_KEY** obrigatório (criptografa as
+  sessões de autenticação e as chaves de LLM dos projetos).
+- **Mascaramento de dados:** quando o LLM não é local, o tráfego que vai para o
+  modelo tem credenciais e PII mascaradas (`SCOPEHOUND_REDACT=auto`). O que é
+  enviado ao alvo e o que fica guardado no projeto não mudam.
+
+As rotas `/health`, `/oob/*` e a interface `/app` ficam abertas; o resto exige
+token.
+
+## Listener OOB
+
+Equivalente simplificado ao Collaborator. `oob_payload` gera uma URL única; se
+o alvo a acessar (SSRF, XXE, injeção cega), `oob_poll` mostra o callback. O
+listener é a rota `/oob/{token}` da própria API; defina
+`SCOPEHOUND_OOB_BASE_URL` com a URL externa pela qual o alvo a alcança. (DNS
+OOB fica para depois.)
+
+## Ferramentas externas
+
+`nuclei`, `ffuf` e `sqlmap` são um segundo portão: **desligadas por padrão**
+(`SCOPEHOUND_ENABLE_EXTERNAL_TOOLS=true` para habilitar) e não vêm instaladas
+na imagem. São checadas contra o escopo; o `sqlmap` passa pela allowlist de
+flags (força `--batch --risk=1 --level=1`, recusa `--os-shell`, `-u` para
+outro alvo etc.) e **sempre pede aprovação**.
+
+## Modo CI
+
+```bash
+uv run scopehound run demo --goal "encontrar IDOR na API" --fail-on high --sarif out.sarif
+```
+
+Roda uma tarefa `/goal` sem interação, imprime os leads, escreve SARIF 2.1.0
+(consumível pelo GitHub code scanning) e sai com código ≠ 0 se houver achado
+na severidade mínima. Use um LLM local no CI para não enviar tráfego para fora.
+
 ## Configuração
 
 Variáveis de ambiente com prefixo `SCOPEHOUND_` (ou no `.env`; veja
@@ -475,6 +530,10 @@ Variáveis de ambiente com prefixo `SCOPEHOUND_` (ou no `.env`; veja
 | `INTERNAL_DENY_CIDRS` | depende do modo | JSON, ex.: `["10.0.0.0/8"]` |
 | `HARD_DENY_CIDRS` | `[]` | Faixas que nenhum projeto pode liberar |
 | `VERIFY_TLS` | `true` | |
+| `REDACT` | `auto` | Mascara dados ao LLM: `auto`/`on`/`off` ou categorias |
+| `ENABLE_EXTERNAL_TOOLS` | `false` | Habilita nuclei/ffuf/sqlmap |
+| `OOB_BASE_URL` | — | URL externa do listener OOB |
+| `OIDC_ISSUER` / `OIDC_AUDIENCE` / `OIDC_JWKS_URL` | — | OIDC (modo servidor) |
 | `REQUEST_TIMEOUT` | `15` | Segundos |
 | `MAX_RESPONSE_BYTES` | `2000000` | Limite do corpo da resposta |
 
@@ -487,6 +546,10 @@ src/scopehound/
 ├── tools/        ferramentas do agente (schema + impacto + execução)
 ├── traffic/      histórico, importadores HAR/Burp, site map, addon do mitmproxy
 ├── skills/       carregador de skills + skills embutidas (.md)
+├── redact.py     mascaramento de dados enviados ao LLM
+├── oob.py        registro do listener OOB
+├── report.py     SARIF e resumo (modo CI)
+├── api/auth.py   autenticação OIDC e papéis
 ├── agent/        grafo LangGraph, prompt, provedor de LLM, modelo roteirizado
 ├── core/         runtime, casos de uso, execução de tarefas, eventos
 ├── store/        modelos SQLAlchemy e migrações Alembic
@@ -496,6 +559,7 @@ src/scopehound/
 ├── secrets.py    criptografia de segredos
 ├── config.py     configuração
 └── cli.py        CLI
+deploy/           Dockerfile, docker-compose, .env de exemplo
 docs/PLANO.md     plano das fases
 tests/            testes (LLM roteirizado e alvo simulado; não gastam tokens)
 ```
@@ -513,7 +577,8 @@ critério de pronto de cada fase: na Fase 1, pedir aprovação, pausar, reinicia
 o processo, retomar e registrar um lead; na Fase 2, responder quais endpoints
 recebem IDs numéricos usando só o tráfego do projeto; na Fase 3, um `/goal`
 que persegue o objetivo por vários passos e um subagente que divide o orçamento;
-na Fase 4, a interface é servida e usa só endpoints já existentes.
+na Fase 4, a interface é servida e usa só endpoints já existentes; na Fase 5,
+o mascaramento, a allowlist do sqlmap, os papéis de acesso e o SARIF do CI.
 
 Nova migração depois de alterar `store/models.py`:
 

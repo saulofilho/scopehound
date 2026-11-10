@@ -165,12 +165,15 @@ def summarize(row: Exchange) -> str:
     )
 
 
-def render_exchange(row: Exchange, max_body: int = 4000) -> str:
-    def headers(items) -> str:
-        return "\n".join(f"{k}: {v}" for k, v in items)
+def render_exchange(row: Exchange, max_body: int = 4000, *, redactor=None) -> str:
+    red = redactor.text if redactor else (lambda x: x)
+    hval = redactor.header_value if redactor else (lambda _k, v: v)
 
-    req_body = row.request_body[:max_body]
-    res_body = row.response_body[:max_body]
+    def headers(items) -> str:
+        return "\n".join(f"{k}: {hval(k, v)}" for k, v in items)
+
+    req_body = red(row.request_body[:max_body])
+    res_body = red(row.response_body[:max_body])
     cut = " [truncado]" if len(row.response_body) > max_body else ""
     return (
         f"id {row.id} · origem {row.source}\n"

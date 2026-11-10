@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import difflib
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -17,7 +17,9 @@ from pydantic import BaseModel, Field, ValidationError
 
 from ..guardrails import Egress, EgressNetworkError, GuardrailError, evaluate_poc
 from ..policy import Impact, ToolSpec
+from ..redact import Redactor
 from ..traffic.model import ExchangeIn
+from .external import FfufArgs, NucleiArgs, SqlmapArgs, ffuf, nuclei, sqlmap
 from .extra import (
     ContentDiscoveryArgs,
     RaceRequestArgs,
@@ -29,6 +31,7 @@ from .extra import (
     replay_as,
 )
 from .meta import SpawnSubagentArgs, UseSkillArgs, spawn_subagent, use_skill
+from .oob import OobPayloadArgs, OobPollArgs, oob_payload, oob_poll
 
 if TYPE_CHECKING:
     from ..traffic import TrafficStore
@@ -120,9 +123,17 @@ class ToolContext:
     confirm_lead: Callable[[str, str], Awaitable[bool]]
     traffic: TrafficStore
     get_session: Callable[[str], Awaitable[dict[str, str] | None]]
+    redactor: Redactor = field(default_factory=lambda: Redactor(frozenset()))
     library: Any = None
     source_root: Path | None = None
     spawn: Callable[..., Awaitable[str]] | None = None
+    scope: Any = None
+    external_enabled: bool = False
+    external_timeout: float = 120.0
+    dry_run_external: bool = False
+    bins: dict[str, str] = field(default_factory=dict)
+    oob_new: Callable[[], tuple[str, str]] | None = None
+    oob_poll: Callable[[str], list | None] | None = None
 
     async def record(self, res, headers: dict[str, str], body: str) -> str:
         return await _record(self, res, headers, body)
@@ -135,11 +146,13 @@ class Tool:
     run: Callable[[ToolContext, Any], Awaitable[str]]
 
 
-def _format_response(res) -> str:
+def _format_response(res, redactor: Redactor) -> str:
     if res.dry_run:
         return f"DRY_RUN: {res.method} {res.url} passaria (IP {res.resolved_ip})"
-    headers = "\n".join(f"{k}: {v}" for k, v in list(res.headers.items())[:25])
-    body = res.text[:BODY_EXCERPT]
+    headers = "\n".join(
+        f"{k}: {redactor.header_value(k, v)}" for k, v in list(res.headers.items())[:25]
+    )
+    body = redactor.text(res.text[:BODY_EXCERPT])
     more = " [corpo truncado]" if res.truncated or len(res.text) > BODY_EXCERPT else ""
     return untrusted(
         f"{res.method} {res.url} -> {res.status} ({res.elapsed_ms:.0f} ms, IP {res.resolved_ip})\n"
@@ -176,14 +189,15 @@ async def _send_request(ctx: ToolContext, a: SendRequestArgs) -> str:
         )
         parts = []
         for hop in chain.hops:
-            parts.append(await _record(ctx, hop, a.headers, a.body) + _format_response(hop))
+            recorded = await _record(ctx, hop, a.headers, a.body)
+            parts.append(recorded + _format_response(hop, ctx.redactor))
         if chain.blocked:
             parts.append(f"BLOQUEADO no próximo salto: {chain.blocked}")
         if chain.exceeded:
             parts.append("Limite de redirects atingido.")
         return "\n---\n".join(parts)
     res = await ctx.egress.send(a.method, a.url, headers=a.headers, content=a.body or None)
-    return await _record(ctx, res, a.headers, a.body) + _format_response(res)
+    return await _record(ctx, res, a.headers, a.body) + _format_response(res, ctx.redactor)
 
 
 async def _search_traffic(ctx: ToolContext, a: SearchTrafficArgs) -> str:
@@ -202,7 +216,7 @@ async def _get_request(ctx: ToolContext, a: GetRequestArgs) -> str:
     row = await ctx.traffic.get(a.id)
     if row is None:
         return f"Troca {a.id!r} não encontrada (use o id completo ou um prefixo único de 8+)."
-    return untrusted(render_exchange(row, a.max_body))
+    return untrusted(render_exchange(row, a.max_body, redactor=ctx.redactor))
 
 
 async def _site_map(ctx: ToolContext, a: SiteMapArgs) -> str:
@@ -412,6 +426,53 @@ TOOLS: dict[str, Tool] = {
         ),
         Tool(
             ToolSpec(
+                "oob_payload",
+                "Gera uma URL de callback (OOB) para detectar SSRF/XXE/injeções cegas.",
+                "active",
+            ),
+            OobPayloadArgs,
+            oob_payload,
+        ),
+        Tool(
+            ToolSpec(
+                "oob_poll",
+                "Verifica se o alvo acessou uma URL OOB (callbacks recebidos).",
+                "read",
+                default_manual="act",
+            ),
+            OobPollArgs,
+            oob_poll,
+        ),
+        Tool(
+            ToolSpec(
+                "nuclei",
+                "Scanner de templates (nuclei). Externo, desligado por padrão.",
+                "intrusive",
+            ),
+            NucleiArgs,
+            nuclei,
+        ),
+        Tool(
+            ToolSpec(
+                "ffuf",
+                "Fuzzing de caminhos/parâmetros (ffuf). Externo, desligado por padrão.",
+                "intrusive",
+            ),
+            FfufArgs,
+            ffuf,
+        ),
+        Tool(
+            ToolSpec(
+                "sqlmap",
+                "Teste de SQL injection (sqlmap), baixo risco. Externo, sempre pede aprovação.",
+                "intrusive",
+                always_ask=True,
+            ),
+            SqlmapArgs,
+            sqlmap,
+        ),
+        Tool(
+            ToolSpec(
                 "finish",
                 "Encerra a tarefa com um resumo.",
                 "read",
@@ -450,7 +511,8 @@ async def run_tool(tool: Tool, ctx: ToolContext, raw_args: Mapping[str, Any]) ->
     except ValidationError as exc:
         return "error", f"ERRO: argumentos inválidos: {exc.errors(include_url=False)}"
     try:
-        return "executed", await tool.run(ctx, args)
+        text = await tool.run(ctx, args)
+        return "executed", ctx.redactor.text(text)
     except GuardrailError as exc:
         return "blocked", f"BLOQUEADO ({type(exc).__name__}): {exc}"
     except EgressNetworkError as exc:
