@@ -12,7 +12,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Any, TypedDict
 
-from langchain_core.messages import AIMessage, AnyMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langgraph.graph import END, START, StateGraph, add_messages
 from langgraph.types import interrupt
 
@@ -28,6 +34,9 @@ class AgentState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]
     decisions: dict[str, dict[str, Any]]
     session_grants: list[str]
+    active_skill: str | None
+    goal: str | None
+    goal_nudges: int
     finished: bool
     stopped: bool
 
@@ -46,15 +55,33 @@ def build_graph(rt: Runtime) -> StateGraph:
         if rt.kill_switch(project).tripped:
             return _stop(f"Parado: kill switch acionado ({rt.kill_switch(project).reason}).")
         s = rt.settings
-        if task.steps_used >= s.task_max_steps:
-            return _stop(f"Parado: orçamento de passos esgotado ({s.task_max_steps}).")
+        step_cap, _req_cap = rt.task_caps.get(task_id, (s.task_max_steps, s.task_max_requests))
+        step_cap = min(step_cap, s.task_max_steps)
+        if task.steps_used >= step_cap:
+            return _stop(f"Parado: orçamento de passos esgotado ({step_cap}).")
         if task.tokens_used >= s.task_max_tokens:
             return _stop(f"Parado: orçamento de tokens esgotado ({s.task_max_tokens}).")
 
         settings = project.tool_settings or {}
-        tools = openai_tool_schemas(lambda name: settings.get(name, {}).get("enabled", True))
+        active_skill = state.get("active_skill")
+        skill = rt.library.get(active_skill) if active_skill else None
+        allowed = skill.available_tools() if skill else None
+
+        def enabled(name: str) -> bool:
+            if settings.get(name, {}).get("enabled", True) is False:
+                return False
+            return allowed is None or name in allowed
+
+        tools = openai_tool_schemas(enabled)
         model = rt.chat_model(project).bind_tools(tools)
-        messages = [SystemMessage(system_prompt(project.scope, task.mode)), *state["messages"]]
+        prompt = system_prompt(
+            project.scope,
+            task.mode,
+            rt.library.catalog(),
+            active_skill=active_skill,
+            goal=state.get("goal"),
+        )
+        messages = [SystemMessage(prompt), *state["messages"]]
         response = await model.ainvoke(messages)
         tokens = (response.usage_metadata or {}).get("total_tokens", 0)
         await rt.add_usage(task_id, steps=1, tokens=tokens)
@@ -65,6 +92,8 @@ def build_graph(rt: Runtime) -> StateGraph:
         last = state["messages"][-1]
         grants = list(state.get("session_grants", []))
         decisions: dict[str, dict[str, Any]] = {}
+        active_skill = state.get("active_skill")
+        skill = rt.library.get(active_skill) if active_skill else None
         for call in last.tool_calls:
             task, project = await rt.load_task(task_id)
             tool = get_tool(call["name"])
@@ -73,6 +102,13 @@ def build_graph(rt: Runtime) -> StateGraph:
                     "allowed": False,
                     "outcome": "denied",
                     "note": f"ferramenta desconhecida: {call['name']}",
+                }
+                continue
+            if skill is not None and call["name"] not in skill.available_tools():
+                decisions[call["id"]] = {
+                    "allowed": False,
+                    "outcome": "denied",
+                    "note": f"ferramenta fora da skill ativa '{active_skill}'",
                 }
                 continue
             decision = decide(
@@ -127,6 +163,7 @@ def build_graph(rt: Runtime) -> StateGraph:
         decisions = state.get("decisions", {})
         out: list[ToolMessage] = []
         finished = False
+        updates: dict[str, Any] = {}
         for call in last.tool_calls:
             decision = decisions.get(
                 call["id"],
@@ -139,25 +176,60 @@ def build_graph(rt: Runtime) -> StateGraph:
                     outcome, text = await run_tool(get_tool(call["name"]), ctx, call["args"])
                 if call["name"] == "finish" and outcome == "executed":
                     finished = True
+                if call["name"] == "use_skill" and outcome == "executed":
+                    updates["active_skill"] = call["args"].get("name")
             await rt.record_action(task_id, call, outcome, text)
             out.append(ToolMessage(content=text, tool_call_id=call["id"], name=call["name"]))
-        return {"messages": out, "finished": finished}
+        return {"messages": out, "finished": finished, **updates}
 
-    def after_agent(state: AgentState) -> str:
+    MAX_GOAL_NUDGES = 3
+
+    async def agent_router(state: AgentState, config) -> dict[str, Any]:
+        """Entre agent e o fim: implementa o loop do /goal."""
         last = state["messages"][-1]
-        if state.get("finished") or not getattr(last, "tool_calls", None):
-            return END
-        return "policy"
+        if state.get("finished") or getattr(last, "tool_calls", None):
+            return {}
+        goal = state.get("goal")
+        nudges = state.get("goal_nudges", 0)
+        if goal and nudges < MAX_GOAL_NUDGES:
+            return {
+                "messages": [
+                    HumanMessage(
+                        f"Objetivo ainda em aberto: {goal}\n"
+                        "Continue perseguindo-o com as ferramentas, ou chame finish "
+                        "se já o cumpriu ou se não há mais o que fazer."
+                    )
+                ],
+                "goal_nudges": nudges + 1,
+            }
+        return {"finished": True}
 
     def after_tools(state: AgentState) -> str:
         return END if state.get("finished") else "agent"
 
+    def route_after_agent(state: AgentState) -> str:
+        last = state["messages"][-1]
+        if state.get("finished"):
+            return END
+        if getattr(last, "tool_calls", None):
+            return "policy"
+        # Sem tool calls: numa tarefa com /goal, o router decide se insiste ou
+        # encerra; numa conversa normal, a vez volta ao analista (status idle).
+        if state.get("goal"):
+            return "router"
+        return END
+
+    def route_after_router(state: AgentState) -> str:
+        return "agent" if not state.get("finished") else END
+
     graph = StateGraph(AgentState)
     graph.add_node("agent", agent)
+    graph.add_node("router", agent_router)
     graph.add_node("policy", policy)
     graph.add_node("tools", tools)
     graph.add_edge(START, "agent")
-    graph.add_conditional_edges("agent", after_agent, ["policy", END])
+    graph.add_conditional_edges("agent", route_after_agent, ["policy", "router", END])
+    graph.add_conditional_edges("router", route_after_router, ["agent", END])
     graph.add_edge("policy", "tools")
     graph.add_conditional_edges("tools", after_tools, ["agent", END])
     return graph

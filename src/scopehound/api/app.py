@@ -64,6 +64,16 @@ class TrafficIn(BaseModel):
     source: str = "proxy"
 
 
+class SessionIn(BaseModel):
+    name: str
+    secret: dict[str, str]
+    description: str = ""
+
+
+class SourceIn(BaseModel):
+    path: str | None = None
+
+
 class KillIn(BaseModel):
     reason: str = ""
 
@@ -139,6 +149,31 @@ def create_app(runtime: Runtime, *, manage_runtime: bool = True) -> FastAPI:
     @app.get("/projects/{project_id}/audit")
     async def audit(project_id: str, limit: int = 200):
         return [row_dict(r) for r in await svc.list_audit(rt, project_id, limit)]
+
+    # skills, sessões e código-fonte
+    @app.get("/skills")
+    async def skills():
+        return await svc.list_skills(rt)
+
+    @app.get("/projects/{project_id}/sessions")
+    async def sessions(project_id: str):
+        return [
+            {"name": r.name, "description": r.description}
+            for r in await guard(svc.list_sessions(rt, project_id))
+        ]
+
+    @app.put("/projects/{project_id}/sessions")
+    async def put_session(project_id: str, body: SessionIn):
+        await guard(svc.set_session(rt, project_id, body.name, body.secret, body.description))
+        return {"name": body.name}
+
+    @app.put("/projects/{project_id}/source")
+    async def put_source(project_id: str, body: SourceIn):
+        return project_dict(await guard(svc.set_source_root(rt, project_id, body.path)))
+
+    @app.get("/tasks/{task_id}/subtasks")
+    async def subtasks(task_id: str):
+        return [row_dict(t) for t in await svc.list_subtasks(rt, task_id)]
 
     # tráfego
     @app.post("/projects/{project_id}/traffic")

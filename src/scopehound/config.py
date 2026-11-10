@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     task_max_steps: int = 30
     task_max_requests: int = 200
     task_max_tokens: int = 500_000
+    skill_dirs: list[Path] = []
 
     def effective_internal_deny(self) -> list[str]:
         if self.internal_deny_cidrs is not None:

@@ -43,9 +43,18 @@ class TaskRunner:
             job.cancel()
         await asyncio.gather(*self._background.values(), return_exceptions=True)
 
-    async def run(self, task_id: str, graph_input: Any) -> str:
+    async def run(
+        self,
+        task_id: str,
+        graph_input: Any,
+        *,
+        step_cap: int | None = None,
+        request_cap: int | None = None,
+    ) -> str:
         rt = self.rt
         async with self._locks[task_id]:
+            if step_cap is not None:
+                rt.task_caps[task_id] = (step_cap, request_cap or rt.settings.task_max_requests)
             await rt.set_task_status(task_id, "running")
             config = {"configurable": {"thread_id": task_id}}
             error: str | None = None
@@ -72,5 +81,6 @@ class TaskRunner:
             except Exception as exc:  # noqa: BLE001 - a falha vira status da tarefa
                 log.exception("tarefa %s falhou", task_id)
                 status, error = "failed", f"{type(exc).__name__}: {exc}"
+            rt.task_caps.pop(task_id, None)
             await rt.set_task_status(task_id, status, error=error)
             return status

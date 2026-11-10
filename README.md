@@ -21,15 +21,16 @@ também **em servidor** (time, com login e projetos compartilhados, na Fase 5).
 2. [Como funciona](#como-funciona)
 3. [Início rápido](#início-rápido)
 4. [Tráfego e site map](#tráfego-e-site-map)
-5. [LLM: provedores e chave própria](#llm-provedores-e-chave-própria)
-6. [Arquivo de escopo](#arquivo-de-escopo)
-7. [Modos de autonomia e aprovações](#modos-de-autonomia-e-aprovações)
-8. [Modelo de segurança](#modelo-de-segurança)
-9. [Referência da CLI](#referência-da-cli)
-10. [Referência da API](#referência-da-api)
-11. [Configuração](#configuração)
-12. [Estrutura do projeto](#estrutura-do-projeto)
-13. [Desenvolvimento](#desenvolvimento)
+5. [Skills, /goal e subagentes](#skills-goal-e-subagentes)
+6. [LLM: provedores e chave própria](#llm-provedores-e-chave-própria)
+7. [Arquivo de escopo](#arquivo-de-escopo)
+8. [Modos de autonomia e aprovações](#modos-de-autonomia-e-aprovações)
+9. [Modelo de segurança](#modelo-de-segurança)
+10. [Referência da CLI](#referência-da-cli)
+11. [Referência da API](#referência-da-api)
+12. [Configuração](#configuração)
+13. [Estrutura do projeto](#estrutura-do-projeto)
+14. [Desenvolvimento](#desenvolvimento)
 
 ---
 
@@ -40,8 +41,8 @@ também **em servidor** (time, com login e projetos compartilhados, na Fase 5).
 | 0 | Guardrails: escopo, política de IP, egress, orçamento, kill switch | ✅ |
 | 1 | Núcleo do agente: policy engine, aprovações, ferramentas, API, chat | ✅ |
 | 2 | Contexto de tráfego: proxy, importação HAR/Burp, site map | ✅ |
-| 3 | Skills, `/goal` e subagentes | ⏳ próxima |
-| 4 | Interface web | — |
+| 3 | Skills, `/goal` e subagentes | ✅ |
+| 4 | Interface web | ⏳ próxima |
 | 5 | Servidor: Docker, Postgres, SSO, listener OOB, ferramentas externas, CI | — |
 
 Plano completo: [docs/PLANO.md](docs/PLANO.md).
@@ -89,6 +90,8 @@ quando `verify_finding` reexecuta a prova de conceito e a evidência bate.
 | Ferramentas do Burp | `send_request`, `search_traffic`, `get_request`, `site_map`, `diff_responses`, `save_lead`, `verify_finding`, `finish` |
 | Proxy history e site map | `scopehound proxy` + histórico + site map normalizado (`/api/Users/{id}`) |
 | Contexto do projeto (site map, tráfego) | O agente consulta o histórico antes de enviar requisições |
+| Skills bank (metodologias) | Skills em arquivo; `use_skill` carrega a metodologia e foca as ferramentas |
+| `/goal` e subagentes | Loop `/goal` e `spawn_subagent` com orçamento dividido |
 | Scope do Burp, checado antes de agir | `Scope` + `check_url` + política de IP, no egress |
 | Manual / Smart / Autonomous | Mesmos modos, no policy engine |
 | Ask / Act por ferramenta | `scopehound project tool` / `PUT /projects/{id}/tools/{tool}` |
@@ -220,6 +223,64 @@ http://localhost:3000
 > O histórico guarda cookies e tokens da sua navegação, e as ferramentas os
 > mostram ao modelo. Com dados reais, use um LLM local (`--local-only`).
 
+## Skills, /goal e subagentes
+
+**Skills** são metodologias prontas para classes de vulnerabilidade
+(equivalente ao banco de skills do Burp AT). Cada uma é um arquivo Markdown
+com frontmatter: nome, descrição e as ferramentas que ela usa. O agente vê só
+o catálogo (nome + descrição); ao escolher uma com `use_skill`, ele carrega a
+metodologia **e as ferramentas ficam restritas às daquela skill** — tanto no
+que o modelo enxerga quanto no que o policy engine deixa executar.
+
+```bash
+uv run scopehound skills
+# content-discovery  Encontra endpoints, arquivos e áreas não lincadas ...
+# idor               Testa acesso indevido a objetos de outro usuário ...
+# race-condition     Testa condições de corrida enviando requisições concorrentes
+```
+
+Skills embutidas: `content-discovery`, `idor`, `race-condition`. Para
+adicionar as suas, aponte `SCOPEHOUND_SKILL_DIRS` para um diretório com
+arquivos `.md` (uma skill com o mesmo nome sobrescreve a embutida).
+
+**Sessões de autenticação** alimentam a skill de IDOR: a `replay_as` repete
+uma requisição do histórico como outra identidade. Cadastre pelo menos duas:
+
+```bash
+uv run scopehound session add lab userA -H "Cookie: token=aaa"
+uv run scopehound session add lab userB -H "Cookie: token=bbb"
+```
+
+Os valores são guardados criptografados e nunca devolvidos pela API.
+
+**`/goal`**: uma tarefa iniciada com `/goal <critério>` entra em um laço que
+persegue o objetivo por vários passos, parando quando o agente chama `finish`,
+quando o critério é cumprido ou quando o orçamento acaba.
+
+```
+você › /goal encontrar um IDOR na API de cestas
+```
+
+**Subagentes**: para investigações amplas, o agente pode chamar
+`spawn_subagent`, que roda uma subtarefa paralela com orçamento próprio,
+**descontado do orçamento do pai**. O resumo e os leads da subtarefa voltam
+para o agente principal.
+
+**Ferramentas desta fase**:
+
+| Ferramenta | Impacto | Faz |
+|---|---|---|
+| `use_skill` | leitura | Carrega uma skill e restringe as ferramentas |
+| `replay_as` | active | Repete uma troca como outra sessão (controle de acesso) |
+| `content_discovery` | intrusive | Procura caminhos ocultos (wordlist) |
+| `race_request` | intrusive | N requisições concorrentes (condição de corrida) |
+| `read_source` | leitura | Lê um arquivo do código do alvo (dentro da raiz configurada) |
+| `spawn_subagent` | active | Cria uma subtarefa paralela |
+
+`read_source` só funciona se você apontar a raiz do código:
+`scopehound project source lab /caminho/do/repo`. A leitura é confinada a essa
+raiz (sem `..`).
+
 ## LLM: provedores e chave própria
 
 O scopehound fala com qualquer provedor **compatível com a API da OpenAI**.
@@ -339,6 +400,10 @@ Nenhuma destas regras depende do modelo, e nenhum prompt as altera.
 | `scopehound project list` | Lista os projetos |
 | `scopehound project llm PROJETO [--base-url] [--model] [--api-key] [--clear-api-key]` | Define o LLM do projeto, inclusive com a sua chave |
 | `scopehound project tool PROJETO FERRAMENTA [--enable/--disable] [--manual ask\|act]` | Liga/desliga ferramentas e define Ask/Act |
+| `scopehound project source PROJETO [CAMINHO]` | Raiz de código para read_source (vazio remove) |
+| `scopehound skills` | Lista as skills disponíveis |
+| `scopehound session add PROJETO NOME -H 'Cookie: ...'` | Cadastra uma sessão de autenticação |
+| `scopehound session list PROJETO` | Lista as sessões (sem valores) |
 | `scopehound chat PROJETO [--task ID] [--mode MODO]` | Conversa no terminal, com aprovações interativas |
 | `scopehound proxy PROJETO [--port 8081] [--api URL]` | Proxy de captura (extra `proxy`; requer `serve`) |
 | `scopehound import PROJETO ARQUIVO [--format har\|burp]` | Importa HAR ou XML do Burp |
@@ -367,6 +432,10 @@ Nenhuma destas regras depende do modelo, e nenhum prompt as altera.
 | `GET /tasks/{id}/actions` | Ações executadas, rejeitadas ou bloqueadas |
 | `GET /tasks/{id}/approvals[?status=pending]` · `POST /approvals/{id}` | Aprovações |
 | `GET /tasks/{id}/events` | Eventos em tempo real (SSE): mensagens, aprovações, status |
+| `GET /tasks/{id}/subtasks` | Subtarefas de uma tarefa |
+| `GET /skills` | Catálogo de skills |
+| `GET /projects/{id}/sessions` · `PUT /projects/{id}/sessions` | Sessões de autenticação (valores só de escrita) |
+| `PUT /projects/{id}/source` | Raiz de código do read_source |
 
 Status de tarefa: `idle` · `running` · `waiting_approval` · `done` ·
 `stopped` · `failed`.
@@ -394,6 +463,7 @@ Variáveis de ambiente com prefixo `SCOPEHOUND_` (ou no `.env`; veja
 | `TASK_MAX_STEPS` | `30` | Passos do agente por tarefa |
 | `TASK_MAX_REQUESTS` | `200` | Requisições por tarefa |
 | `TASK_MAX_TOKENS` | `500000` | Tokens por tarefa |
+| `SKILL_DIRS` | `[]` | Diretórios com skills do usuário (JSON) |
 | `INTERNAL_DENY_CIDRS` | depende do modo | JSON, ex.: `["10.0.0.0/8"]` |
 | `HARD_DENY_CIDRS` | `[]` | Faixas que nenhum projeto pode liberar |
 | `VERIFY_TLS` | `true` | |
@@ -408,6 +478,7 @@ src/scopehound/
 ├── policy/       modos de autonomia, Ask/Act, regras de aprovação
 ├── tools/        ferramentas do agente (schema + impacto + execução)
 ├── traffic/      histórico, importadores HAR/Burp, site map, addon do mitmproxy
+├── skills/       carregador de skills + skills embutidas (.md)
 ├── agent/        grafo LangGraph, prompt, provedor de LLM, modelo roteirizado
 ├── core/         runtime, casos de uso, execução de tarefas, eventos
 ├── store/        modelos SQLAlchemy e migrações Alembic
@@ -431,7 +502,8 @@ Os testes não usam LLM real nem rede externa. O agente roda com um modelo
 roteirizado (`agent/fake.py`) e o alvo é simulado. Um dos testes cobre o
 critério de pronto de cada fase: na Fase 1, pedir aprovação, pausar, reiniciar
 o processo, retomar e registrar um lead; na Fase 2, responder quais endpoints
-recebem IDs numéricos usando só o tráfego do projeto.
+recebem IDs numéricos usando só o tráfego do projeto; na Fase 3, um `/goal`
+que persegue o objetivo por vários passos e um subagente que divide o orçamento.
 
 Nova migração depois de alterar `store/models.py`:
 

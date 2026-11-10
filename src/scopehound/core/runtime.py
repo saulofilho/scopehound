@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import AsyncExitStack, asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -18,7 +19,18 @@ from ..config import Settings
 from ..guardrails import AuditEvent, Budget, Egress, KillSwitch, RateLimiter, Resolver, Scope
 from ..policy import Decision
 from ..secrets import SecretBox, load_secret_key
-from ..store import Action, Approval, AuditLog, Database, Lead, Project, Task, run_migrations
+from ..skills import load_skills
+from ..store import (
+    Action,
+    Approval,
+    AuditLog,
+    AuthSession,
+    Database,
+    Lead,
+    Project,
+    Task,
+    run_migrations,
+)
 from ..store.models import utcnow
 from ..tools import ToolContext
 from ..traffic import TrafficStore
@@ -46,6 +58,7 @@ class Runtime:
         self.runner = TaskRunner(self)
         self._kill: dict[str, KillSwitch] = {}
         self._limiters: dict[str, RateLimiter] = {}
+        self.task_caps: dict[str, tuple[int, int]] = {}
         self._stack = AsyncExitStack()
 
     async def __aenter__(self) -> Runtime:
@@ -66,6 +79,7 @@ class Runtime:
         saver = await self._stack.enter_async_context(
             AsyncSqliteSaver.from_conn_string(str(s.checkpoint_path()))
         )
+        self.library = load_skills(tuple(s.skill_dirs))
         self.graph = build_graph(self).compile(checkpointer=saver)
         # Tarefas que estavam rodando quando o processo caiu.
         async with self.db() as session:
@@ -172,7 +186,26 @@ class Runtime:
 
         try:
             traffic = TrafficStore(self.db, project.id, scope, task_id)
-            yield ToolContext(project.id, task_id, egress, save_lead, confirm_lead, traffic)
+
+            async def get_session(name: str) -> dict[str, str] | None:
+                return await self.get_auth_session(project.id, name)
+
+            async def spawn(**kw: Any) -> str:
+                return await self.spawn_subagent(project.id, task_id, **kw)
+
+            source_root = Path(project.source_root) if project.source_root else None
+            yield ToolContext(
+                project.id,
+                task_id,
+                egress,
+                save_lead,
+                confirm_lead,
+                traffic,
+                get_session=get_session,
+                library=self.library,
+                source_root=source_root,
+                spawn=spawn,
+            )
         finally:
             await egress.aclose()
             await self.add_usage(task_id, requests=budget.requests - task.requests_used)
@@ -283,6 +316,128 @@ class Runtime:
                 )
             )
             await session.commit()
+
+    # ---- sessões de autenticação ----------------------------------------
+    async def set_auth_session(
+        self, project_id: str, name: str, secret: dict[str, str], description: str = ""
+    ) -> None:
+        token = self.secrets.encrypt(__import__("json").dumps(secret))
+        async with self.db() as session:
+            existing = await session.scalar(
+                select(AuthSession).where(
+                    AuthSession.project_id == project_id, AuthSession.name == name
+                )
+            )
+            if existing is None:
+                session.add(
+                    AuthSession(
+                        project_id=project_id, name=name, secret_enc=token, description=description
+                    )
+                )
+            else:
+                existing.secret_enc = token
+                existing.description = description
+            await session.commit()
+
+    async def get_auth_session(self, project_id: str, name: str) -> dict[str, str] | None:
+        async with self.db() as session:
+            row = await session.scalar(
+                select(AuthSession).where(
+                    AuthSession.project_id == project_id, AuthSession.name == name
+                )
+            )
+        if row is None:
+            return None
+        return __import__("json").loads(self.secrets.decrypt(row.secret_enc))
+
+    async def list_auth_sessions(self, project_id: str) -> list[AuthSession]:
+        async with self.db() as session:
+            return list(
+                await session.scalars(
+                    select(AuthSession)
+                    .where(AuthSession.project_id == project_id)
+                    .order_by(AuthSession.name)
+                )
+            )
+
+    # ---- subagentes ------------------------------------------------------
+    async def spawn_subagent(
+        self,
+        project_id: str,
+        parent_id: str,
+        *,
+        title: str,
+        prompt: str,
+        skill: str | None = None,
+        max_steps: int = 10,
+        max_requests: int = 40,
+    ) -> str:
+        from langchain_core.messages import HumanMessage
+
+        parent, project = await self.load_task(parent_id)
+        # orçamento dividido: o filho não pode pedir mais do que resta ao pai
+        s = self.settings
+        steps_left = max(0, s.task_max_steps - parent.steps_used)
+        reqs_left = max(0, s.task_max_requests - parent.requests_used)
+        max_steps = min(max_steps, steps_left)
+        max_requests = min(max_requests, reqs_left)
+        if max_steps < 1:
+            return "sem orçamento restante para subagente."
+        async with self.db() as sess:
+            child = Task(
+                project_id=project_id, parent_id=parent_id, title=title[:200], mode=parent.mode
+            )
+            sess.add(child)
+            await sess.commit()
+            child_id = child.id
+        init: dict[str, Any] = {
+            "messages": [HumanMessage(prompt)],
+            "finished": False,
+            "stopped": False,
+        }
+        if skill:
+            init["active_skill"] = skill
+        await self.audit(
+            project_id, "subagent.spawned", f"{title} (pai {parent_id})", task_id=child_id
+        )
+        # roda já (sequencial): o modelo pai aguarda o resultado
+        status = await self.runner.run(child_id, init, step_cap=max_steps, request_cap=max_requests)
+        child = await self.get_task_row(child_id)
+        messages = await self.graph.aget_state({"configurable": {"thread_id": child_id}})
+        summary = ""
+        for m in reversed(messages.values.get("messages", [])):
+            if m.type == "ai" and m.content:
+                summary = m.content
+                break
+        leads = await self.subagent_leads(child_id)
+        # cobra o consumo do filho no pai
+        await self.add_usage(
+            parent_id,
+            steps=child.steps_used,
+            requests=child.requests_used,
+            tokens=child.tokens_used,
+        )
+        lead_text = f" Leads: {leads}." if leads else ""
+        return (
+            f"subagente '{title}' terminou ({status}, {child.steps_used} passos, "
+            f"{child.requests_used} req).{lead_text}\n"
+            f"Resumo: {summary or '(sem resumo)'}"
+        )
+
+    async def get_task_row(self, task_id: str) -> Task:
+        async with self.db() as session:
+            return await session.get(Task, task_id)
+
+    async def subagent_leads(self, task_id: str) -> int:
+        from sqlalchemy import func
+
+        async with self.db() as session:
+            return (
+                await session.scalar(
+                    select(func.count()).select_from(Lead).where(Lead.task_id == task_id)
+                )
+                or 0
+            )
 
     async def write_egress_audit(self, project_id: str, task_id: str, events: list[AuditEvent]):
         if not events:

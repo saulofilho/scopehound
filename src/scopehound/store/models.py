@@ -50,6 +50,7 @@ class Project(Base):
     llm_model: Mapped[str | None] = mapped_column(String(200))
     llm_api_key_enc: Mapped[str | None] = mapped_column(Text)
     killed_reason: Mapped[str | None] = mapped_column(Text)
+    source_root: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -58,7 +59,9 @@ class Task(Base):
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    parent_id: Mapped[str | None] = mapped_column(String(32), index=True)
     title: Mapped[str] = mapped_column(String(200))
+    goal: Mapped[str | None] = mapped_column(Text)
     mode: Mapped[str] = mapped_column(String(20), default="smart")
     # idle | running | waiting_approval | done | stopped | failed
     status: Mapped[str] = mapped_column(String(30), default="idle")
@@ -163,4 +166,20 @@ class Exchange(Base):
     response_size: Mapped[int] = mapped_column(Integer, default=0)
     mime: Mapped[str] = mapped_column(String(200), default="")
     elapsed_ms: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AuthSession(Base):
+    """Credenciais de uma identidade do alvo (cookies/headers), para o replay_as.
+
+    O valor fica criptografado em repouso; nunca é devolvido pela API."""
+
+    __tablename__ = "auth_sessions"
+    __table_args__ = (UniqueConstraint("project_id", "name"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str] = mapped_column(Text, default="")
+    secret_enc: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

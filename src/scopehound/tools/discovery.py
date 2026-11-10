@@ -1,0 +1,37 @@
+"""Wordlist embutida para content_discovery (pequena, segura para laboratório)."""
+
+from __future__ import annotations
+
+DEFAULT_WORDLIST = (
+    "admin",
+    "api",
+    "api/v1",
+    "api/v2",
+    "actuator",
+    "actuator/health",
+    "backup",
+    "config",
+    "config.json",
+    ".env",
+    ".git/config",
+    "debug",
+    "docs",
+    "graphql",
+    "health",
+    "internal",
+    "login",
+    "metrics",
+    "private",
+    "robots.txt",
+    "server-status",
+    "setup",
+    "sitemap.xml",
+    "status",
+    "swagger",
+    "swagger-ui.html",
+    "test",
+    "openapi.json",
+    ".well-known/security.txt",
+    "console",
+    "dashboard",
+)

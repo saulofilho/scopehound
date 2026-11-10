@@ -192,6 +192,15 @@ async def _check_llm_allowed(rt: Runtime, project: Project) -> None:
         )
 
 
+def _parse_goal(prompt: str) -> tuple[str, str | None]:
+    """`/goal <critério>` inicia um loop que persegue o critério até cumpri-lo."""
+    stripped = prompt.strip()
+    if stripped.startswith("/goal "):
+        goal = stripped[len("/goal ") :].strip()
+        return goal, goal
+    return prompt, None
+
+
 async def create_task(
     rt: Runtime,
     project_id: str,
@@ -204,14 +213,18 @@ async def create_task(
     _check_mode(mode)
     project = await rt.get_project(project_id)
     await _check_llm_allowed(rt, project)
+    content, goal = _parse_goal(prompt)
     async with rt.db() as session:
-        task = Task(project_id=project_id, title=(title or prompt)[:200], mode=mode)
+        task = Task(project_id=project_id, title=(title or content)[:200], mode=mode, goal=goal)
         session.add(task)
         await session.commit()
-    await rt.audit(project_id, "task.created", f"modo {mode}", task_id=task.id)
-    await _run(
-        rt, task.id, {"messages": [HumanMessage(prompt)], "finished": False, "stopped": False}, wait
+    await rt.audit(
+        project_id, "task.created", f"modo {mode}" + (" · /goal" if goal else ""), task_id=task.id
     )
+    init: dict = {"messages": [HumanMessage(content)], "finished": False, "stopped": False}
+    if goal:
+        init["goal"] = goal
+    await _run(rt, task.id, init, wait)
     return await get_task(rt, task.id)
 
 
@@ -385,3 +398,55 @@ async def get_exchange(rt: Runtime, project_id: str, ref: str):
 
 async def sitemap(rt: Runtime, project_id: str, host: str | None = None):
     return await rt.traffic(await rt.get_project(project_id)).sitemap(host)
+
+
+# ---- sessões de autenticação e código-fonte ------------------------------
+async def set_session(
+    rt: Runtime, project_id: str, name: str, secret: dict, description: str = ""
+) -> None:
+    await rt.get_project(project_id)
+    if not secret:
+        raise Conflict("informe pelo menos um header (ex.: Cookie ou Authorization)")
+    await rt.set_auth_session(
+        project_id, name, {str(k): str(v) for k, v in secret.items()}, description
+    )
+    await rt.audit(project_id, "session.set", f"{name}: {sorted(secret)}")
+
+
+async def list_sessions(rt: Runtime, project_id: str):
+    return await rt.list_auth_sessions(project_id)
+
+
+async def set_source_root(rt: Runtime, project_id: str, path: str | None) -> Project:
+    from pathlib import Path
+
+    if path:
+        resolved = Path(path).expanduser().resolve()
+        if not resolved.is_dir():
+            raise Conflict(f"diretório não encontrado: {path}")
+        path = str(resolved)
+    async with rt.db() as session:
+        project = await session.get(Project, project_id)
+        if project is None:
+            raise NotFound(f"projeto {project_id} não encontrado")
+        project.source_root = path
+        await session.commit()
+    await rt.audit(project_id, "project.source_root", path or "(removido)")
+    return await rt.get_project(project_id)
+
+
+async def list_skills(rt: Runtime):
+    return rt.library.catalog()
+
+
+async def list_subtasks(rt: Runtime, parent_id: str):
+    from sqlalchemy import select as _select
+
+    from ..store import Task as _Task
+
+    async with rt.db() as session:
+        return list(
+            await session.scalars(
+                _select(_Task).where(_Task.parent_id == parent_id).order_by(_Task.created_at)
+            )
+        )

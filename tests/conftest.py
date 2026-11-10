@@ -46,11 +46,14 @@ PUBLIC_IP = "93.184.215.14"
 class FakeTarget:
     """Alvo simulado: registra as requisições recebidas."""
 
-    def __init__(self):
+    def __init__(self, handler=None):
         self.requests: list[httpx.Request] = []
+        self.handler = handler
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
+        if self.handler is not None:
+            return self.handler(request)
         if request.url.path == "/api/users/2":
             return httpx.Response(200, json={"id": 2, "email": "outro@lab"})
         return httpx.Response(200, text="ok")

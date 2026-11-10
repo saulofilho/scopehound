@@ -16,6 +16,8 @@ from .guardrails import Budget, Egress, GuardrailError, load_scope
 app = typer.Typer(no_args_is_help=True, help="Agente de pentest com escopo imposto fora do modelo.")
 project_app = typer.Typer(no_args_is_help=True, help="Projetos (escopo, LLM, ferramentas).")
 app.add_typer(project_app, name="project")
+session_app = typer.Typer(no_args_is_help=True, help="Sessões de autenticação (para replay_as).")
+app.add_typer(session_app, name="session")
 
 ScopeOpt = Annotated[Path, typer.Option("--scope", "-s", help="Arquivo de escopo")]
 
@@ -250,6 +252,71 @@ def proxy(
         fg="green",
     )
     asyncio.run(run_proxy(api_url, match[0]["id"], port))
+
+
+@app.command()
+def skills() -> None:
+    """Lista as skills disponíveis."""
+    from .core import service as svc
+
+    for s in _with_runtime(svc.list_skills):
+        typer.echo(f"{s['name']:18} {s['description']}")
+
+
+@session_app.command("add")
+def session_add(
+    project: str,
+    name: str,
+    header: Annotated[
+        list[str], typer.Option("--header", "-H", help="Ex.: -H 'Cookie: token=...'")
+    ],
+    description: Annotated[str, typer.Option()] = "",
+) -> None:
+    """Cadastra uma sessão (cookies/headers de uma identidade) para o replay_as."""
+    from .core import service as svc
+
+    secret: dict[str, str] = {}
+    for item in header:
+        if ":" not in item:
+            _fail(f"header inválido (use 'Nome: valor'): {item}")
+        k, v = item.split(":", 1)
+        secret[k.strip()] = v.strip()
+
+    async def run(rt):
+        p = await svc.find_project(rt, project)
+        await svc.set_session(rt, p.id, name, secret, description)
+
+    _with_runtime(run)
+    typer.echo(f"sessão '{name}' salva ({', '.join(secret)})")
+
+
+@session_app.command("list")
+def session_list(project: str) -> None:
+    """Lista as sessões do projeto (sem mostrar os valores)."""
+    from .core import service as svc
+
+    async def run(rt):
+        p = await svc.find_project(rt, project)
+        return await svc.list_sessions(rt, p.id)
+
+    for row in _with_runtime(run):
+        typer.echo(f"{row.name:16} {row.description}")
+
+
+@project_app.command("source")
+def project_source(
+    project: str,
+    path: Annotated[str | None, typer.Argument(help="Raiz do código do alvo; vazio remove")] = None,
+) -> None:
+    """Define a raiz de código para a ferramenta read_source (só leitura)."""
+    from .core import service as svc
+
+    async def run(rt):
+        p = await svc.find_project(rt, project)
+        return await svc.set_source_root(rt, p.id, path)
+
+    p = _with_runtime(run)
+    typer.echo(f"source_root de {p.name}: {p.source_root or '(nenhum)'}")
 
 
 @app.command()

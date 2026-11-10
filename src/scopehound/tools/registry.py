@@ -10,6 +10,7 @@ from __future__ import annotations
 import difflib
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -17,6 +18,17 @@ from pydantic import BaseModel, Field, ValidationError
 from ..guardrails import Egress, EgressNetworkError, GuardrailError, evaluate_poc
 from ..policy import Impact, ToolSpec
 from ..traffic.model import ExchangeIn
+from .extra import (
+    ContentDiscoveryArgs,
+    RaceRequestArgs,
+    ReadSourceArgs,
+    ReplayAsArgs,
+    content_discovery,
+    race_request,
+    read_source,
+    replay_as,
+)
+from .meta import SpawnSubagentArgs, UseSkillArgs, spawn_subagent, use_skill
 
 if TYPE_CHECKING:
     from ..traffic import TrafficStore
@@ -107,6 +119,13 @@ class ToolContext:
     save_lead: Callable[..., Awaitable[str]]
     confirm_lead: Callable[[str, str], Awaitable[bool]]
     traffic: TrafficStore
+    get_session: Callable[[str], Awaitable[dict[str, str] | None]]
+    library: Any = None
+    source_root: Path | None = None
+    spawn: Callable[..., Awaitable[str]] | None = None
+
+    async def record(self, res, headers: dict[str, str], body: str) -> str:
+        return await _record(self, res, headers, body)
 
 
 @dataclass(frozen=True)
@@ -334,6 +353,62 @@ TOOLS: dict[str, Tool] = {
             ),
             DiffResponsesArgs,
             _diff_responses,
+        ),
+        Tool(
+            ToolSpec(
+                "replay_as",
+                "Repete uma troca do histórico com outra sessão de autenticação (testa acesso).",
+                "active",
+            ),
+            ReplayAsArgs,
+            replay_as,
+        ),
+        Tool(
+            ToolSpec(
+                "content_discovery",
+                "Procura caminhos ocultos a partir de uma URL base (wordlist).",
+                "intrusive",
+            ),
+            ContentDiscoveryArgs,
+            content_discovery,
+        ),
+        Tool(
+            ToolSpec(
+                "race_request",
+                "Envia N requisições concorrentes para testar condição de corrida.",
+                "intrusive",
+            ),
+            RaceRequestArgs,
+            race_request,
+        ),
+        Tool(
+            ToolSpec(
+                "read_source",
+                "Lê um arquivo do código-fonte do alvo (só leitura, dentro da raiz configurada).",
+                "read",
+                default_manual="act",
+            ),
+            ReadSourceArgs,
+            read_source,
+        ),
+        Tool(
+            ToolSpec(
+                "use_skill",
+                "Carrega a metodologia de uma skill e restringe as ferramentas a ela.",
+                "read",
+                default_manual="act",
+            ),
+            UseSkillArgs,
+            use_skill,
+        ),
+        Tool(
+            ToolSpec(
+                "spawn_subagent",
+                "Cria uma subtarefa paralela com orçamento próprio (dividido do seu).",
+                "active",
+            ),
+            SpawnSubagentArgs,
+            spawn_subagent,
         ),
         Tool(
             ToolSpec(
