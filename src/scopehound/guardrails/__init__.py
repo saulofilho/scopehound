@@ -6,7 +6,7 @@ decide.
 """
 
 from .budget import Budget
-from .egress import AuditEvent, Egress, EgressResult, RedirectChain, system_resolver
+from .egress import AuditEvent, Egress, EgressResult, RedirectChain, Resolver, system_resolver
 from .errors import (
     BudgetExhausted,
     EgressDenied,
@@ -40,6 +40,7 @@ __all__ = [
     "PocVerdict",
     "RateLimiter",
     "RedirectChain",
+    "Resolver",
     "Scope",
     "ScopeViolation",
     "Target",

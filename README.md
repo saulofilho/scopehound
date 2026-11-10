@@ -8,7 +8,7 @@ impostos por uma camada separada do modelo**, e toda ação fica registrada.
 > ⚠️ Uso autorizado apenas. O arquivo de escopo é o contrato: o que não está
 > nele é bloqueado antes de qualquer I/O.
 
-Plano completo: [docs/PLANO.md](docs/PLANO.md). Estado atual: **Fase 0 (guardrails)**.
+Plano completo: [docs/PLANO.md](docs/PLANO.md). Estado atual: **Fase 1 (núcleo do agente)**.
 
 ## Guardrails (Fase 0)
 
@@ -24,6 +24,32 @@ Plano completo: [docs/PLANO.md](docs/PLANO.md). Estado atual: **Fase 0 (guardrai
 | Argumentos externos | `guardrails/toolargs.py` | Allowlist de flags do sqlmap |
 | Verificação de PoC | `guardrails/verification.py` | Achado só é confirmado com reexecução real |
 
+## Agente (Fase 1)
+
+O modelo pede ações; o policy engine decide; só então as ferramentas executam.
+
+- **Modos** (como no Burp AT): `manual` (cada ferramenta Ask/Act), `smart`
+  (padrão: leituras e GET passam, o resto pergunta), `autonomous`.
+  Ferramentas desabilitadas nunca rodam; ferramentas `always_ask` sempre perguntam.
+- **Aprovações**: aprovar uma vez · para a sessão (smart) · sempre (manual) ·
+  rejeitar · rejeitar e redirecionar. A pausa sobrevive a reinícios (checkpoint).
+- **Ferramentas**: `send_request`, `save_lead`, `verify_finding`, `finish`.
+- **Registro**: ações, aprovações, leads e cada decisão de egress ficam no banco.
+
+### LLM
+
+Qualquer provedor compatível com a API da OpenAI: Gemini (free tier),
+Groq, OpenRouter ou Ollama (local). Configure no `.env` (veja `.env.example`)
+ou por projeto, **com a sua própria chave** (guardada criptografada, nunca
+devolvida pela API):
+
+```bash
+uv run scopehound project llm lab --model gemini-2.5-flash --api-key
+```
+
+Projetos com dados sensíveis: `project create --local-only` recusa qualquer
+LLM que não rode na sua máquina.
+
 ## Uso
 
 ```bash
@@ -33,6 +59,12 @@ uv run scopehound check http://localhost:3000/api/users --scope scope.yaml
 ```
 
 `check` não envia nada: só diz se a requisição passaria e para qual IP iria.
+
+```bash
+uv run scopehound project create lab --scope scope.yaml
+uv run scopehound chat lab --mode smart     # conversa com aprovações no terminal
+uv run scopehound serve                     # API em http://127.0.0.1:8787/docs
+```
 
 ## Configuração
 
