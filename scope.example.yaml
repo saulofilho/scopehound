@@ -1,0 +1,15 @@
+# Contrato de autorização. Tudo fora daqui é bloqueado antes de qualquer I/O.
+allowed_hosts:
+  - localhost
+  - "*.lab"            # curinga só no formato *.sufixo
+allowed_cidrs: []      # necessário para alvos em rede interna no modo servidor
+allowed_ports: [3000, 8080]
+allowed_schemes: [http, https]
+allowed_paths: ["/*"]
+exclude_paths:
+  - /logout
+  - /admin/delete
+allowed_methods: [GET, HEAD, OPTIONS, POST, PUT, PATCH]
+max_requests_per_second: 5
+authorized_by: voce@empresa.com
+authorization_ref: TICKET-SEC-123
