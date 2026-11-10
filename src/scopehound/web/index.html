@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>scopehound</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <div class="brand">🐕‍🦺 scopehound</div>
+    <select id="project-select" title="Projeto"></select>
+    <span id="mode-pill" class="pill" hidden></span>
+    <span id="killed-pill" class="pill danger" hidden>kill switch</span>
+    <span class="spacer"></span>
+    <span id="status-dot" class="dot" title="API"></span>
+  </header>
+
+  <main>
+    <aside id="sidebar">
+      <div class="side-head">
+        <strong>Tarefas</strong>
+        <button id="new-task-btn" class="small">+ nova</button>
+      </div>
+      <ul id="task-list"></ul>
+    </aside>
+
+    <section id="center">
+      <div id="conversation" class="hidden">
+        <div class="conv-head">
+          <span id="task-title"></span>
+          <select id="task-mode" title="Modo de autonomia">
+            <option value="manual">manual</option>
+            <option value="smart">smart</option>
+            <option value="autonomous">autonomous</option>
+          </select>
+          <span id="task-status" class="pill"></span>
+          <span id="task-budget" class="muted"></span>
+        </div>
+        <div id="messages"></div>
+        <div id="approval-area"></div>
+        <form id="composer">
+          <textarea id="composer-input" rows="2"
+            placeholder="Mensagem para o agente (ou /goal <objetivo>)…"></textarea>
+          <button type="submit">Enviar</button>
+        </form>
+      </div>
+      <div id="empty-center" class="placeholder">
+        Selecione ou crie uma tarefa.
+      </div>
+    </section>
+
+    <aside id="context">
+      <nav id="tabs">
+        <button data-tab="sitemap" class="active">Site map</button>
+        <button data-tab="traffic">Tráfego</button>
+        <button data-tab="leads">Achados</button>
+        <button data-tab="scope">Escopo</button>
+        <button data-tab="tools">Ferramentas</button>
+        <button data-tab="audit">Auditoria</button>
+      </nav>
+      <div id="tab-content"></div>
+    </aside>
+  </main>
+
+  <dialog id="new-task-dialog">
+    <form method="dialog">
+      <h3>Nova tarefa</h3>
+      <label>Objetivo / prompt
+        <textarea id="nt-prompt" rows="4" required
+          placeholder="Ex.: mapeie a API e procure IDOR&#10;ou /goal encontrar um IDOR"></textarea>
+      </label>
+      <label>Modo
+        <select id="nt-mode">
+          <option value="smart">smart</option>
+          <option value="manual">manual</option>
+          <option value="autonomous">autonomous</option>
+        </select>
+      </label>
+      <menu>
+        <button value="cancel">Cancelar</button>
+        <button id="nt-create" value="default" class="primary">Criar</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <div id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

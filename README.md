@@ -42,8 +42,8 @@ também **em servidor** (time, com login e projetos compartilhados, na Fase 5).
 | 1 | Núcleo do agente: policy engine, aprovações, ferramentas, API, chat | ✅ |
 | 2 | Contexto de tráfego: proxy, importação HAR/Burp, site map | ✅ |
 | 3 | Skills, `/goal` e subagentes | ✅ |
-| 4 | Interface web | ⏳ próxima |
-| 5 | Servidor: Docker, Postgres, SSO, listener OOB, ferramentas externas, CI | — |
+| 4 | Interface web | ✅ |
+| 5 | Servidor: Docker, Postgres, SSO, listener OOB, ferramentas externas, CI | ⏳ próxima |
 
 Plano completo: [docs/PLANO.md](docs/PLANO.md).
 
@@ -148,11 +148,19 @@ scopehound › Vou começar pela listagem de produtos.
 No chat, `/mode manual|smart|autonomous` troca o modo da tarefa e `/sair`
 encerra. Para continuar depois: `scopehound chat lab --task <id>`.
 
-Ou use a API (documentação interativa em `http://127.0.0.1:8787/docs`):
+Ou abra a **interface web**, que o próprio `serve` disponibiliza:
 
 ```bash
 uv run scopehound serve
 ```
+
+- Interface: `http://127.0.0.1:8787/app/` — painel de tarefas, conversa em
+  tempo real, cartões de aprovação e abas de site map, tráfego, achados,
+  escopo, ferramentas e auditoria.
+- API e documentação interativa: `http://127.0.0.1:8787/docs`.
+
+A interface é um app de página única em JavaScript puro (sem etapa de build e
+sem CDN), servido pela própria API e falando com ela por `fetch` e SSE.
 
 ## Tráfego e site map
 
@@ -483,6 +491,7 @@ src/scopehound/
 ├── core/         runtime, casos de uso, execução de tarefas, eventos
 ├── store/        modelos SQLAlchemy e migrações Alembic
 ├── api/          FastAPI
+├── web/          interface (HTML/CSS/JS, sem build)
 ├── chat.py       chat de terminal
 ├── secrets.py    criptografia de segredos
 ├── config.py     configuração
@@ -503,7 +512,8 @@ roteirizado (`agent/fake.py`) e o alvo é simulado. Um dos testes cobre o
 critério de pronto de cada fase: na Fase 1, pedir aprovação, pausar, reiniciar
 o processo, retomar e registrar um lead; na Fase 2, responder quais endpoints
 recebem IDs numéricos usando só o tráfego do projeto; na Fase 3, um `/goal`
-que persegue o objetivo por vários passos e um subagente que divide o orçamento.
+que persegue o objetivo por vários passos e um subagente que divide o orçamento;
+na Fase 4, a interface é servida e usa só endpoints já existentes.
 
 Nova migração depois de alterar `store/models.py`:
 

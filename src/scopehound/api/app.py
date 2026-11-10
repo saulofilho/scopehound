@@ -10,10 +10,12 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from ..core import Conflict, NotFound, Runtime
@@ -291,5 +293,14 @@ def create_app(runtime: Runtime, *, manage_runtime: bool = True) -> FastAPI:
                     yield f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
 
         return StreamingResponse(stream(), media_type="text/event-stream")
+
+    # interface web (app de página única, sem build; servido pela própria API)
+    web_dir = Path(__file__).resolve().parent.parent / "web"
+    if web_dir.is_dir():
+        app.mount("/app", StaticFiles(directory=web_dir, html=True), name="web")
+
+        @app.get("/")
+        async def index():
+            return RedirectResponse("/app/")
 
     return app

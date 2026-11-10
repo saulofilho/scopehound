@@ -45,6 +45,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/scopehound"]
+artifacts = ["*.md", "*.mako", "*.html", "*.css", "*.js"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
