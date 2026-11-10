@@ -1,82 +1,354 @@
 # scopehound
 
-O farejador que nunca sai do escopo. Agente de IA para pentest assistido por
-humano, inspirado na lógica do [Burp AT](https://portswigger.net/burp/burp-at):
-o modelo forma hipóteses e pede ações; **escopo, permissões e limites são
-impostos por uma camada separada do modelo**, e toda ação fica registrada.
+**O farejador que nunca sai do escopo.** Agente de IA para pentest assistido
+por humano, inspirado na lógica do [Burp AT](https://portswigger.net/burp/burp-at).
+O modelo forma hipóteses e pede ações. **Escopo, permissões e limites são
+impostos por uma camada separada do modelo**, e toda ação fica registrada no
+projeto.
 
-> ⚠️ Uso autorizado apenas. O arquivo de escopo é o contrato: o que não está
-> nele é bloqueado antes de qualquer I/O.
+Roda **local** (um analista, na própria máquina) e foi desenhado para rodar
+também **em servidor** (time, com login e projetos compartilhados, na Fase 5).
 
-Plano completo: [docs/PLANO.md](docs/PLANO.md). Estado atual: **Fase 1 (núcleo do agente)**.
+> ⚠️ **Uso autorizado apenas.** Aponte o scopehound só para sistemas seus ou
+> com autorização por escrito. O arquivo de escopo é o contrato: o que não
+> está nele é bloqueado antes de qualquer I/O.
 
-## Guardrails (Fase 0)
+---
 
-| Regra | Onde | O que garante |
+## Sumário
+
+1. [Status](#status)
+2. [Como funciona](#como-funciona)
+3. [Início rápido](#início-rápido)
+4. [LLM: provedores e chave própria](#llm-provedores-e-chave-própria)
+5. [Arquivo de escopo](#arquivo-de-escopo)
+6. [Modos de autonomia e aprovações](#modos-de-autonomia-e-aprovações)
+7. [Modelo de segurança](#modelo-de-segurança)
+8. [Referência da CLI](#referência-da-cli)
+9. [Referência da API](#referência-da-api)
+10. [Configuração](#configuração)
+11. [Estrutura do projeto](#estrutura-do-projeto)
+12. [Desenvolvimento](#desenvolvimento)
+
+---
+
+## Status
+
+| Fase | Conteúdo | Estado |
 |---|---|---|
-| Escopo | `guardrails/scope.py` | Host, porta, esquema, path e método autorizados. Path normalizado (`%XX`, `..`, `;params`, barras duplas) antes da comparação; codificação dupla e credenciais na URL são recusadas |
-| Política de IP | `guardrails/ippolicy.py` | Metadados de nuvem e faixas reservadas sempre bloqueados; redes internas bloqueadas no modo servidor, salvo `allowed_cidrs` |
-| Egress | `guardrails/egress.py` | Único caminho de rede. DNS pinning (conecta no IP validado, Host/SNI do nome original), sem proxy do ambiente, sem redirect automático, corpo limitado, evento de auditoria por decisão |
-| Redirects | `Egress.send_following_redirects` | Cada salto passa por todas as regras; credenciais não seguem para outro host |
-| Orçamento | `guardrails/budget.py` | Passos, requisições e tokens, com orçamentos filhos para subagentes |
-| Kill switch | `guardrails/killswitch.py` | Parada de emergência do projeto |
-| Rate limit | `guardrails/ratelimit.py` | Token bucket por projeto (`max_requests_per_second`) |
-| Argumentos externos | `guardrails/toolargs.py` | Allowlist de flags do sqlmap |
-| Verificação de PoC | `guardrails/verification.py` | Achado só é confirmado com reexecução real |
+| 0 | Guardrails: escopo, política de IP, egress, orçamento, kill switch | ✅ |
+| 1 | Núcleo do agente: policy engine, aprovações, ferramentas, API, chat | ✅ |
+| 2 | Contexto de tráfego: proxy, importação HAR/Burp, site map | ⏳ próxima |
+| 3 | Skills, `/goal` e subagentes | — |
+| 4 | Interface web | — |
+| 5 | Servidor: Docker, Postgres, SSO, listener OOB, ferramentas externas, CI | — |
 
-## Agente (Fase 1)
+Plano completo: [docs/PLANO.md](docs/PLANO.md).
 
-O modelo pede ações; o policy engine decide; só então as ferramentas executam.
+## Como funciona
 
-- **Modos** (como no Burp AT): `manual` (cada ferramenta Ask/Act), `smart`
-  (padrão: leituras e GET passam, o resto pergunta), `autonomous`.
-  Ferramentas desabilitadas nunca rodam; ferramentas `always_ask` sempre perguntam.
-- **Aprovações**: aprovar uma vez · para a sessão (smart) · sempre (manual) ·
-  rejeitar · rejeitar e redirecionar. A pausa sobrevive a reinícios (checkpoint).
-- **Ferramentas**: `send_request`, `save_lead`, `verify_finding`, `finish`.
-- **Registro**: ações, aprovações, leads e cada decisão de egress ficam no banco.
+```
+  analista ──▶ chat / API
+                  │
+                  ▼
+   ┌──────────── agente (LangGraph) ─────────────┐
+   │                                              │
+   │  agent ──▶ policy ──▶ tools ──┐              │
+   │    ▲          │ pede aprovação │              │
+   │    │          ▼ (pausa)        │              │
+   │    └──────────────────────────┘              │
+   └───────────────┬──────────────────────────────┘
+                   ▼
+   guardrails: escopo · política de IP · orçamento · kill switch · rate limit
+                   ▼
+              egress (único caminho de rede) ──▶ alvo autorizado
+                   │
+                   ▼
+   banco do projeto: tarefas · aprovações · ações · leads · auditoria
+```
 
-### LLM
+1. **agent**: o modelo lê a conversa e pede ferramentas. Cada chamada
+   consome passos e tokens do orçamento da tarefa.
+2. **policy**: cada pedido é decidido pelo policy engine: passa, pede
+   aprovação ou é negado. Quando pede aprovação, a tarefa **pausa**. A pausa
+   fica salva em checkpoint e sobrevive a reinícios do processo.
+3. **tools**: só o que foi permitido executa. Toda requisição passa pelo
+   egress. Respostas do alvo voltam ao modelo marcadas como **dados não
+   confiáveis**.
 
-Qualquer provedor compatível com a API da OpenAI: Gemini (free tier),
-Groq, OpenRouter ou Ollama (local). Configure no `.env` (veja `.env.example`)
-ou por projeto, **com a sua própria chave** (guardada criptografada, nunca
-devolvida pela API):
+Como no Burp AT, achados nascem como **leads**. Só viram **confirmados**
+quando `verify_finding` reexecuta a prova de conceito e a evidência bate.
+
+| Burp AT | scopehound |
+|---|---|
+| Ferramentas do Burp | `send_request`, `save_lead`, `verify_finding`, `finish` (mais nas próximas fases) |
+| Scope do Burp, checado antes de agir | `Scope` + `check_url` + política de IP, no egress |
+| Manual / Smart / Autonomous | Mesmos modos, no policy engine |
+| Ask / Act por ferramenta | `scopehound project tool` / `PUT /projects/{id}/tools/{tool}` |
+| Approve / session / always / reject / redirect | Mesmas respostas, com as mesmas regras |
+| Arquivo de projeto e Logger | Banco SQLite com ações, aprovações, leads e auditoria de cada decisão |
+| Tasks e conversa | Tarefas com conversa contínua (CLI `chat` ou API) |
+
+## Início rápido
+
+Requisitos: Python 3.12+ e [uv](https://docs.astral.sh/uv/).
+
+```bash
+git clone https://github.com/saulofilho/scopehound.git
+cd scopehound
+uv sync
+cp .env.example .env          # configure o LLM (veja a próxima seção)
+cp scope.example.yaml scope.yaml
+```
+
+Suba um alvo de laboratório, por exemplo o OWASP Juice Shop:
+
+```bash
+docker run --rm -p 3000:3000 bkimminich/juice-shop
+```
+
+Confira se o escopo libera o alvo. Esse comando não envia nada:
+
+```bash
+uv run scopehound check http://localhost:3000/rest/products/search --scope scope.yaml
+```
+
+Crie o projeto e converse com o agente:
+
+```bash
+uv run scopehound project create lab --scope scope.yaml
+```
+
+```bash
+uv run scopehound chat lab --mode smart
+```
+
+```
+você › mapeie a API de produtos em http://localhost:3000 e procure IDOR
+
+scopehound › Vou começar pela listagem de produtos.
+  ↳ send_request {"url": "http://localhost:3000/api/Products"}
+  ⇠ send_request: <dados_do_alvo nao_confiaveis> GET ... -> 200 ...
+
+⚠ aprovação: send_request (intrusive) — impacto intrusive: confirme antes de executar
+  {"method": "POST", "url": "http://localhost:3000/api/BasketItems", ...}
+  [o] aprovar uma vez [s] aprovar para a sessão (smart) [a] sempre aprovar (manual) [r] rejeitar [d] rejeitar e redirecionar
+```
+
+No chat, `/mode manual|smart|autonomous` troca o modo da tarefa e `/sair`
+encerra. Para continuar depois: `scopehound chat lab --task <id>`.
+
+Ou use a API (documentação interativa em `http://127.0.0.1:8787/docs`):
+
+```bash
+uv run scopehound serve
+```
+
+## LLM: provedores e chave própria
+
+O scopehound fala com qualquer provedor **compatível com a API da OpenAI**.
+Trocar de modelo é só configuração.
+
+| Provedor | `SCOPEHOUND_LLM_BASE_URL` | Custo | Quando usar |
+|---|---|---|---|
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` | free tier | Desenvolvimento e laboratório |
+| Groq | `https://api.groq.com/openai/v1` | free tier | Alternativa / reserva |
+| OpenRouter | `https://openrouter.ai/api/v1` | modelos `:free` | Alternativa / reserva |
+| Ollama | `http://localhost:11434/v1` | grátis, local | **Dados sensíveis**: nada sai da máquina |
+
+> ⚠️ Em free tiers, o provedor pode usar os dados enviados para treinar
+> modelos. Use só com alvos de laboratório. Para tráfego real, use Ollama.
+
+**Padrão para todos os projetos**, no `.env`:
+
+```ini
+SCOPEHOUND_LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+SCOPEHOUND_LLM_MODEL=gemini-2.5-flash   # confira o nome atual no Google AI Studio
+SCOPEHOUND_LLM_API_KEY=sua-chave
+```
+
+**Por projeto, com a sua própria chave.** A chave é pedida sem eco no
+terminal, guardada **criptografada** (Fernet) e **nunca devolvida** pela API:
 
 ```bash
 uv run scopehound project llm lab --model gemini-2.5-flash --api-key
 ```
 
-Projetos com dados sensíveis: `project create --local-only` recusa qualquer
-LLM que não rode na sua máquina.
-
-## Uso
-
 ```bash
-uv sync
-cp scope.example.yaml scope.yaml
-uv run scopehound check http://localhost:3000/api/users --scope scope.yaml
+uv run scopehound project llm lab --base-url http://localhost:11434/v1 --model qwen3:8b
 ```
 
-`check` não envia nada: só diz se a requisição passaria e para qual IP iria.
+```bash
+uv run scopehound project llm lab --clear-api-key
+```
+
+**Projetos com dados sensíveis** recusam qualquer LLM que não rode na sua
+máquina:
 
 ```bash
-uv run scopehound project create lab --scope scope.yaml
-uv run scopehound chat lab --mode smart     # conversa com aprovações no terminal
-uv run scopehound serve                     # API em http://127.0.0.1:8787/docs
+uv run scopehound project create cliente-x --scope scope.yaml --local-only
 ```
+
+## Arquivo de escopo
+
+```yaml
+allowed_hosts:
+  - localhost
+  - "*.lab"            # curinga só no formato *.sufixo (nada de *.com)
+allowed_cidrs: []      # necessário para alvos em rede interna no modo servidor
+allowed_ports: [3000, 8080]
+allowed_schemes: [http, https]
+allowed_paths: ["/*"]
+exclude_paths:         # também bloqueia variações: /Logout, //logout, /%6cogout, /logout;x
+  - /logout
+  - /admin/delete
+allowed_methods: [GET, HEAD, OPTIONS, POST, PUT, PATCH]
+max_requests_per_second: 5
+authorized_by: voce@empresa.com     # obrigatório
+authorization_ref: TICKET-SEC-123
+```
+
+Escopos amplos demais são recusados: `*`, `*.com`, `0.0.0.0/0`, faixas
+maiores que /8 (IPv4) ou /32 (IPv6).
+
+## Modos de autonomia e aprovações
+
+| Modo | Comportamento |
+|---|---|
+| `manual` | Cada ferramenta segue a configuração do projeto: **Ask** (pergunta) ou **Act** (executa) |
+| `smart` (padrão) | Leituras e requisições sem efeito colateral (GET/HEAD/OPTIONS) passam; o resto pergunta |
+| `autonomous` | Não pergunta, exceto em ferramentas que sempre exigem aprovação |
+
+Regras que valem em qualquer modo:
+
+- Ferramenta **desabilitada** nunca roda.
+- Ferramenta **`always_ask`** (ex.: rodar script, alterar escopo) sempre
+  pergunta e não pode virar Act.
+- Pedidos de aprovação esperam indefinidamente.
+
+| Resposta | Efeito | Disponível |
+|---|---|---|
+| `once` | Aprova só este pedido | sempre |
+| `session` | Aprova esta ferramenta, neste nível de impacto, até o fim da tarefa | só `smart` |
+| `always` | Muda a ferramenta para Act no projeto | só `manual` |
+| `reject` | Recusa; o agente é informado | sempre |
+| `redirect` | Recusa e envia uma instrução ao agente | sempre |
+
+## Modelo de segurança
+
+Nenhuma destas regras depende do modelo, e nenhum prompt as altera.
+
+| Regra | Onde | O que garante |
+|---|---|---|
+| Escopo | `guardrails/scope.py` | Host, porta, esquema, path e método autorizados. O path é normalizado (`%XX`, `..`, `;params`, barras duplas) antes da comparação. Codificação dupla e credenciais na URL são recusadas |
+| Política de IP | `guardrails/ippolicy.py` | Metadados de nuvem e faixas reservadas sempre bloqueados, inclusive em formas IPv6 (mapeado, NAT64, 6to4). Redes internas bloqueadas no modo servidor, salvo `allowed_cidrs` |
+| Egress | `guardrails/egress.py` | Único caminho de rede. Conecta no IP validado (DNS pinning) com Host/SNI do nome original. Ignora proxy do ambiente, não segue redirect sozinho, limita o tamanho da resposta e registra cada decisão |
+| Cabeçalho Host | `Egress._prepare_headers` | Não pode ser trocado: num IP permitido, um proxy reverso poderia encaminhar a requisição para fora do escopo |
+| Redirects | `Egress.send_following_redirects` | Cada salto passa por todas as regras; credenciais não seguem para outro host |
+| Policy engine | `policy/engine.py` | Modos, Ask/Act, ferramentas desabilitadas e `always_ask` |
+| Orçamento | `guardrails/budget.py` | Passos, requisições e tokens por tarefa |
+| Kill switch | `guardrails/killswitch.py` | Parada de emergência por projeto, persistida no banco |
+| Rate limit | `guardrails/ratelimit.py` | Token bucket por projeto |
+| Dados do alvo | `tools/registry.py` | Respostas chegam ao modelo marcadas como não confiáveis (defesa contra prompt injection) |
+| Argumentos externos | `guardrails/toolargs.py` | Allowlist de flags do sqlmap (para a Fase 5) |
+| Verificação de PoC | `guardrails/verification.py` | Achado só é confirmado com reexecução real |
+| Segredos | `secrets.py` | Chaves de LLM dos projetos criptografadas; `secret.key` criado com permissão 0600 |
+
+## Referência da CLI
+
+| Comando | Faz |
+|---|---|
+| `scopehound check URL [-s scope.yaml] [-X MÉTODO]` | Diz se a requisição passaria e para qual IP iria, sem enviar nada |
+| `scopehound project create NOME [-s scope.yaml] [--local-only]` | Cria um projeto a partir do escopo |
+| `scopehound project list` | Lista os projetos |
+| `scopehound project llm PROJETO [--base-url] [--model] [--api-key] [--clear-api-key]` | Define o LLM do projeto, inclusive com a sua chave |
+| `scopehound project tool PROJETO FERRAMENTA [--enable/--disable] [--manual ask\|act]` | Liga/desliga ferramentas e define Ask/Act |
+| `scopehound chat PROJETO [--task ID] [--mode MODO]` | Conversa no terminal, com aprovações interativas |
+| `scopehound serve [--host] [--port]` | Sobe a API (no modo local, só em 127.0.0.1) |
+| `scopehound version` | Mostra a versão |
+
+## Referência da API
+
+| Método e rota | Faz |
+|---|---|
+| `GET /health` | Estado do serviço |
+| `POST /projects` · `GET /projects` · `GET /projects/{id}` | Projetos |
+| `PUT /projects/{id}/llm` | LLM do projeto (`api_key` só de escrita) |
+| `GET /projects/{id}/tools` · `PUT /projects/{id}/tools/{tool}` | Ferramentas (enabled, Ask/Act) |
+| `POST /projects/{id}/kill` · `POST /projects/{id}/revive` | Kill switch |
+| `GET /projects/{id}/leads` · `GET /projects/{id}/audit` | Leads e auditoria |
+| `POST /projects/{id}/tasks` · `GET /projects/{id}/tasks` | Tarefas (rodam em segundo plano) |
+| `GET /tasks/{id}` · `PATCH /tasks/{id}` | Tarefa e troca de modo |
+| `GET /tasks/{id}/messages` · `POST /tasks/{id}/messages` | Conversa |
+| `GET /tasks/{id}/actions` | Ações executadas, rejeitadas ou bloqueadas |
+| `GET /tasks/{id}/approvals[?status=pending]` · `POST /approvals/{id}` | Aprovações |
+| `GET /tasks/{id}/events` | Eventos em tempo real (SSE): mensagens, aprovações, status |
+
+Status de tarefa: `idle` · `running` · `waiting_approval` · `done` ·
+`stopped` · `failed`.
+
+> A API ainda não tem autenticação (chega na Fase 5). No modo local ela só
+> escuta em 127.0.0.1; não exponha o modo servidor em rede antes disso.
 
 ## Configuração
 
-| Variável | Padrão | |
+Variáveis de ambiente com prefixo `SCOPEHOUND_` (ou no `.env`; veja
+[.env.example](.env.example)).
+
+| Variável | Padrão | Descrição |
 |---|---|---|
-| `SCOPEHOUND_MODE` | `local` | `server` bloqueia redes internas por padrão |
-| `SCOPEHOUND_INTERNAL_DENY_CIDRS` | depende do modo | JSON, ex.: `["10.0.0.0/8"]` |
-| `SCOPEHOUND_HARD_DENY_CIDRS` | `[]` | faixas que nenhum projeto pode liberar |
-| `SCOPEHOUND_VERIFY_TLS` | `true` | |
+| `MODE` | `local` | `server` bloqueia redes internas por padrão e exige `SECRET_KEY` |
+| `DATA_DIR` | `.scopehound` | Banco, checkpoints e `secret.key` |
+| `DATABASE_URL` | SQLite em `DATA_DIR` | URL SQLAlchemy assíncrona |
+| `HOST` / `PORT` | `127.0.0.1` / `8787` | Endereço da API |
+| `SECRET_KEY` | gerada no modo local | Chave Fernet para criptografar segredos |
+| `LLM_PROVIDER` | `openai_compat` | Provedor de LLM |
+| `LLM_BASE_URL` | Gemini | URL compatível com OpenAI |
+| `LLM_MODEL` | — | Nome do modelo |
+| `LLM_API_KEY` | — | Chave padrão (projetos podem ter a própria) |
+| `LLM_TEMPERATURE` | `0.1` | |
+| `TASK_MAX_STEPS` | `30` | Passos do agente por tarefa |
+| `TASK_MAX_REQUESTS` | `200` | Requisições por tarefa |
+| `TASK_MAX_TOKENS` | `500000` | Tokens por tarefa |
+| `INTERNAL_DENY_CIDRS` | depende do modo | JSON, ex.: `["10.0.0.0/8"]` |
+| `HARD_DENY_CIDRS` | `[]` | Faixas que nenhum projeto pode liberar |
+| `VERIFY_TLS` | `true` | |
+| `REQUEST_TIMEOUT` | `15` | Segundos |
+| `MAX_RESPONSE_BYTES` | `2000000` | Limite do corpo da resposta |
+
+## Estrutura do projeto
+
+```
+src/scopehound/
+├── guardrails/   escopo, política de IP, egress, orçamento, kill switch, rate limit
+├── policy/       modos de autonomia, Ask/Act, regras de aprovação
+├── tools/        ferramentas do agente (schema + impacto + execução)
+├── agent/        grafo LangGraph, prompt, provedor de LLM, modelo roteirizado
+├── core/         runtime, casos de uso, execução de tarefas, eventos
+├── store/        modelos SQLAlchemy e migrações Alembic
+├── api/          FastAPI
+├── chat.py       chat de terminal
+├── secrets.py    criptografia de segredos
+├── config.py     configuração
+└── cli.py        CLI
+docs/PLANO.md     plano das fases
+tests/            testes (LLM roteirizado e alvo simulado; não gastam tokens)
+```
 
 ## Desenvolvimento
 
 ```bash
+uv sync
 uv run ruff check && uv run ruff format --check && uv run pytest
+```
+
+Os testes não usam LLM real nem rede externa. O agente roda com um modelo
+roteirizado (`agent/fake.py`) e o alvo é simulado. Um dos testes cobre o
+critério de pronto da Fase 1: pedir aprovação, pausar, reiniciar o processo,
+retomar e registrar um lead.
+
+Nova migração depois de alterar `store/models.py`:
+
+```bash
+uv run python -c "from alembic import command; from scopehound.store.db import alembic_config; command.revision(alembic_config('sqlite:///.scopehound/scopehound.db'), message='descricao', autogenerate=True)"
 ```
