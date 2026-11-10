@@ -7,14 +7,19 @@ próprio. Respostas do alvo voltam marcadas como dados não confiáveis.
 
 from __future__ import annotations
 
+import difflib
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
 from ..guardrails import Egress, EgressNetworkError, GuardrailError, evaluate_poc
 from ..policy import Impact, ToolSpec
+from ..traffic.model import ExchangeIn
+
+if TYPE_CHECKING:
+    from ..traffic import TrafficStore
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 Severity = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
@@ -63,6 +68,33 @@ class VerifyFindingArgs(BaseModel):
     lead_id: str | None = Field(default=None, description="Lead existente a confirmar")
 
 
+class SearchTrafficArgs(BaseModel):
+    text: str = Field(
+        default="", description="Trecho na URL, no corpo da requisição ou da resposta"
+    )
+    host: str = ""
+    method: str = ""
+    path_contains: str = ""
+    status: int | None = None
+    param: str = Field(default="", description="Nome de parâmetro (query, form ou JSON)")
+    source: str = Field(default="", description="proxy | har | burp | agent | api")
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class GetRequestArgs(BaseModel):
+    id: str = Field(description="Id da troca (ou prefixo de 8+ caracteres)")
+    max_body: int = Field(default=4000, ge=0, le=20000)
+
+
+class SiteMapArgs(BaseModel):
+    host: str = Field(default="", description="Filtra por host (vazio = todos)")
+
+
+class DiffResponsesArgs(BaseModel):
+    id_a: str
+    id_b: str
+
+
 class FinishArgs(BaseModel):
     summary: str = Field(description="Resumo do que foi feito e dos leads encontrados")
 
@@ -74,6 +106,7 @@ class ToolContext:
     egress: Egress
     save_lead: Callable[..., Awaitable[str]]
     confirm_lead: Callable[[str, str], Awaitable[bool]]
+    traffic: TrafficStore
 
 
 @dataclass(frozen=True)
@@ -95,19 +128,105 @@ def _format_response(res) -> str:
     )
 
 
+async def _record(ctx: ToolContext, res, headers: dict[str, str], body: str) -> str:
+    """Guarda a troca feita pelo agente no histórico do projeto."""
+    if res.dry_run:
+        return ""
+    result = await ctx.traffic.ingest(
+        [
+            ExchangeIn(
+                method=res.method,
+                url=res.url,
+                request_headers=list(headers.items()),
+                request_body=body,
+                status=res.status,
+                response_headers=list(res.headers.multi_items()),
+                response_body=res.text,
+                elapsed_ms=res.elapsed_ms,
+            )
+        ],
+        "agent",
+    )
+    return f"[troca {result.ids[0][:12]}]\n" if result.ids else ""
+
+
 async def _send_request(ctx: ToolContext, a: SendRequestArgs) -> str:
     if a.follow_redirects:
         chain = await ctx.egress.send_following_redirects(
             a.method, a.url, headers=a.headers, content=a.body or None
         )
-        parts = [_format_response(hop) for hop in chain.hops]
+        parts = []
+        for hop in chain.hops:
+            parts.append(await _record(ctx, hop, a.headers, a.body) + _format_response(hop))
         if chain.blocked:
             parts.append(f"BLOQUEADO no próximo salto: {chain.blocked}")
         if chain.exceeded:
             parts.append("Limite de redirects atingido.")
         return "\n---\n".join(parts)
     res = await ctx.egress.send(a.method, a.url, headers=a.headers, content=a.body or None)
-    return _format_response(res)
+    return await _record(ctx, res, a.headers, a.body) + _format_response(res)
+
+
+async def _search_traffic(ctx: ToolContext, a: SearchTrafficArgs) -> str:
+    from ..traffic import summarize
+
+    rows = await ctx.traffic.search(**a.model_dump())
+    if not rows:
+        return "Nenhuma troca encontrada."
+    lines = [summarize(r) for r in rows]
+    return untrusted("\n".join(lines)) + f"\n({len(rows)} resultado(s); use get_request com o id)"
+
+
+async def _get_request(ctx: ToolContext, a: GetRequestArgs) -> str:
+    from ..traffic import render_exchange
+
+    row = await ctx.traffic.get(a.id)
+    if row is None:
+        return f"Troca {a.id!r} não encontrada (use o id completo ou um prefixo único de 8+)."
+    return untrusted(render_exchange(row, a.max_body))
+
+
+async def _site_map(ctx: ToolContext, a: SiteMapArgs) -> str:
+    text = await ctx.traffic.sitemap_text(a.host or None)
+    legend = (
+        "Legenda: {id}/{uuid}/{hash}/{token} = segmento variável; "
+        "#num = parâmetro com valores numéricos; ex: = id de uma troca de exemplo."
+    )
+    return untrusted(text) + "\n" + legend
+
+
+async def _diff_responses(ctx: ToolContext, a: DiffResponsesArgs) -> str:
+    left, right = await ctx.traffic.get(a.id_a), await ctx.traffic.get(a.id_b)
+    if left is None or right is None:
+        return "Uma das trocas não foi encontrada."
+    lh = {k.lower(): v for k, v in left.response_headers}
+    rh = {k.lower(): v for k, v in right.response_headers}
+    header_diff = [
+        f"  {k}: {lh.get(k, '(ausente)')!r} → {rh.get(k, '(ausente)')!r}"
+        for k in sorted(set(lh) | set(rh))
+        if lh.get(k) != rh.get(k) and k not in ("date", "etag", "x-request-id")
+    ]
+    body = list(
+        difflib.unified_diff(
+            left.response_body.splitlines(),
+            right.response_body.splitlines(),
+            "a",
+            "b",
+            lineterm="",
+            n=1,
+        )
+    )
+    summary = (
+        f"status {left.status} → {right.status} · tamanho {left.response_size}B → "
+        f"{right.response_size}B · corpo {'idêntico' if not body else 'diferente'}"
+    )
+    parts = [summary]
+    if header_diff:
+        parts.append("cabeçalhos:\n" + "\n".join(header_diff[:30]))
+    if body:
+        extra = f"\n… (+{len(body) - 120} linhas)" if len(body) > 120 else ""
+        parts.append("corpo:\n" + "\n".join(body[:120]) + extra)
+    return untrusted("\n".join(parts))
 
 
 async def _save_lead(ctx: ToolContext, a: SaveLeadArgs) -> str:
@@ -121,6 +240,7 @@ async def _verify_finding(ctx: ToolContext, a: VerifyFindingArgs) -> str:
     if a.expected_status is None and not a.expected_substring:
         return "ERRO: informe expected_status e/ou expected_substring"
     res = await ctx.egress.send(a.method, a.url, headers=a.headers, content=a.body or None)
+    await _record(ctx, res, a.headers, a.body)
     verdict = evaluate_poc(
         status=res.status,
         body=res.text,
@@ -174,6 +294,46 @@ TOOLS: dict[str, Tool] = {
             ),
             VerifyFindingArgs,
             _verify_finding,
+        ),
+        Tool(
+            ToolSpec(
+                "search_traffic",
+                "Busca no histórico de tráfego do projeto (proxy, importações e agente).",
+                "read",
+                default_manual="act",
+            ),
+            SearchTrafficArgs,
+            _search_traffic,
+        ),
+        Tool(
+            ToolSpec(
+                "get_request",
+                "Mostra uma troca do histórico (requisição e resposta).",
+                "read",
+                default_manual="act",
+            ),
+            GetRequestArgs,
+            _get_request,
+        ),
+        Tool(
+            ToolSpec(
+                "site_map",
+                "Mapa do alvo: endpoints normalizados, métodos e parâmetros observados.",
+                "read",
+                default_manual="act",
+            ),
+            SiteMapArgs,
+            _site_map,
+        ),
+        Tool(
+            ToolSpec(
+                "diff_responses",
+                "Compara as respostas de duas trocas (status, tamanho, cabeçalhos, corpo).",
+                "read",
+                default_manual="act",
+            ),
+            DiffResponsesArgs,
+            _diff_responses,
         ),
         Tool(
             ToolSpec(

@@ -10,7 +10,17 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -124,4 +134,33 @@ class AuditLog(Base):
     url: Mapped[str | None] = mapped_column(Text)
     resolved_ip: Mapped[str | None] = mapped_column(String(64))
     status_code: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Exchange(Base):
+    """Uma requisição e sua resposta (equivalente ao proxy history do Burp)."""
+
+    __tablename__ = "exchanges"
+    __table_args__ = (Index("ix_exchanges_project_host", "project_id", "host"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    task_id: Mapped[str | None] = mapped_column(String(32))
+    # proxy | har | burp | agent | api
+    source: Mapped[str] = mapped_column(String(20))
+    method: Mapped[str] = mapped_column(String(10))
+    url: Mapped[str] = mapped_column(Text)
+    scheme: Mapped[str] = mapped_column(String(10))
+    host: Mapped[str] = mapped_column(String(255))
+    port: Mapped[int] = mapped_column(Integer)
+    path: Mapped[str] = mapped_column(Text)
+    query: Mapped[str] = mapped_column(Text, default="")
+    request_headers: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    request_body: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[int | None] = mapped_column(Integer)
+    response_headers: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    response_body: Mapped[str] = mapped_column(Text, default="")
+    response_size: Mapped[int] = mapped_column(Integer, default=0)
+    mime: Mapped[str] = mapped_column(String(200), default="")
+    elapsed_ms: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -165,6 +165,93 @@ def project_tool(
     typer.echo(json.dumps(_with_runtime(run), ensure_ascii=False, indent=2))
 
 
+@app.command("import")
+def import_cmd(
+    project: str,
+    file: Path,
+    fmt: Annotated[
+        str | None, typer.Option("--format", help="har | burp (detecta sozinho)")
+    ] = None,
+) -> None:
+    """Importa tráfego de um HAR ou do XML exportado do Burp ("Save items")."""
+    from .core import service as svc
+
+    text = file.read_text(encoding="utf-8", errors="replace")
+
+    async def run(rt):
+        p = await svc.find_project(rt, project)
+        return await svc.import_traffic(rt, p.id, text, filename=file.name, fmt=fmt)
+
+    result = _with_runtime(run)
+    typer.echo(f"{result.stored} trocas importadas, {result.skipped_out_of_scope} fora do escopo")
+
+
+@app.command()
+def sitemap(project: str, host: Annotated[str | None, typer.Option()] = None) -> None:
+    """Mostra o site map do projeto."""
+    from .core import service as svc
+    from .traffic import render_sitemap
+
+    async def run(rt):
+        p = await svc.find_project(rt, project)
+        return await svc.sitemap(rt, p.id, host)
+
+    typer.echo(render_sitemap(_with_runtime(run), max_endpoints=10_000))
+
+
+@app.command()
+def traffic(
+    project: str,
+    text: Annotated[str, typer.Option("--text", "-t")] = "",
+    limit: Annotated[int, typer.Option()] = 30,
+) -> None:
+    """Lista o histórico de tráfego (mais recentes primeiro)."""
+    from .core import service as svc
+    from .traffic import summarize
+
+    async def run(rt):
+        p = await svc.find_project(rt, project)
+        return await svc.search_traffic(rt, p.id, text=text, limit=limit)
+
+    for row in _with_runtime(run):
+        typer.echo(summarize(row))
+
+
+@app.command()
+def proxy(
+    project: str,
+    port: Annotated[int, typer.Option(help="Porta do proxy")] = 8081,
+    api: Annotated[str | None, typer.Option(help="URL da API do scopehound")] = None,
+) -> None:
+    """Proxy de captura: navegue pelo app e o tráfego no escopo vai para o projeto.
+
+    Requer `scopehound serve` rodando e o extra de proxy (`uv sync --extra proxy`).
+    """
+    try:
+        import mitmproxy  # noqa: F401
+
+        from .traffic.proxy import run_proxy
+    except ImportError:
+        _fail("instale o extra de proxy: uv sync --extra proxy")
+    settings = Settings()
+    api_url = api or f"http://{settings.host}:{settings.port}"
+    import httpx
+
+    try:
+        projects = httpx.get(f"{api_url}/projects", timeout=5, trust_env=False).json()
+    except httpx.HTTPError:
+        _fail(f"API indisponível em {api_url}: rode `scopehound serve` antes")
+    match = [p for p in projects if project in (p["id"], p["name"])]
+    if not match:
+        _fail(f"projeto {project!r} não encontrado na API")
+    typer.secho(
+        f"proxy em 127.0.0.1:{port} → projeto {match[0]['name']}\n"
+        f"configure o navegador para usar este proxy e instale o certificado em http://mitm.it",
+        fg="green",
+    )
+    asyncio.run(run_proxy(api_url, match[0]["id"], port))
+
+
 @app.command()
 def chat(
     project: str,

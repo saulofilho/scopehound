@@ -59,6 +59,11 @@ class ApprovalIn(BaseModel):
     note: str = ""
 
 
+class TrafficIn(BaseModel):
+    exchanges: list[dict[str, Any]] = Field(max_length=500)
+    source: str = "proxy"
+
+
 class KillIn(BaseModel):
     reason: str = ""
 
@@ -134,6 +139,68 @@ def create_app(runtime: Runtime, *, manage_runtime: bool = True) -> FastAPI:
     @app.get("/projects/{project_id}/audit")
     async def audit(project_id: str, limit: int = 200):
         return [row_dict(r) for r in await svc.list_audit(rt, project_id, limit)]
+
+    # tráfego
+    @app.post("/projects/{project_id}/traffic")
+    async def ingest(project_id: str, body: TrafficIn):
+        if body.source not in ("proxy", "api"):
+            raise HTTPException(422, "source deve ser proxy ou api")
+        result = await guard(svc.ingest_traffic(rt, project_id, body.exchanges, body.source))
+        return {"stored": result.stored, "skipped_out_of_scope": result.skipped_out_of_scope}
+
+    @app.post("/projects/{project_id}/traffic/import")
+    async def import_file(
+        project_id: str, request: Request, format: str | None = None, filename: str = ""
+    ):
+        text = (await request.body()).decode("utf-8", errors="replace")
+        result = await guard(
+            svc.import_traffic(rt, project_id, text, filename=filename, fmt=format)
+        )
+        return {"stored": result.stored, "skipped_out_of_scope": result.skipped_out_of_scope}
+
+    @app.get("/projects/{project_id}/traffic")
+    async def traffic(
+        project_id: str,
+        text: str = "",
+        host: str = "",
+        method: str = "",
+        path_contains: str = "",
+        status: int | None = None,
+        param: str = "",
+        source: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ):
+        rows = await guard(
+            svc.search_traffic(
+                rt,
+                project_id,
+                text=text,
+                host=host,
+                method=method,
+                path_contains=path_contains,
+                status=status,
+                param=param,
+                source=source,
+                limit=limit,
+                offset=offset,
+            )
+        )
+        return [
+            row_dict(
+                r, exclude={"request_body", "response_body", "request_headers", "response_headers"}
+            )
+            for r in rows
+        ]
+
+    @app.get("/projects/{project_id}/traffic/{exchange_id}")
+    async def exchange(project_id: str, exchange_id: str):
+        return row_dict(await guard(svc.get_exchange(rt, project_id, exchange_id)))
+
+    @app.get("/projects/{project_id}/sitemap")
+    async def get_sitemap(project_id: str, host: str | None = None):
+        data = await guard(svc.sitemap(rt, project_id, host))
+        return {origin: [e.to_json() for e in eps] for origin, eps in data.items()}
 
     # tarefas
     @app.post("/projects/{project_id}/tasks", status_code=201)

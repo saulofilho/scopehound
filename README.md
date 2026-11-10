@@ -20,15 +20,16 @@ também **em servidor** (time, com login e projetos compartilhados, na Fase 5).
 1. [Status](#status)
 2. [Como funciona](#como-funciona)
 3. [Início rápido](#início-rápido)
-4. [LLM: provedores e chave própria](#llm-provedores-e-chave-própria)
-5. [Arquivo de escopo](#arquivo-de-escopo)
-6. [Modos de autonomia e aprovações](#modos-de-autonomia-e-aprovações)
-7. [Modelo de segurança](#modelo-de-segurança)
-8. [Referência da CLI](#referência-da-cli)
-9. [Referência da API](#referência-da-api)
-10. [Configuração](#configuração)
-11. [Estrutura do projeto](#estrutura-do-projeto)
-12. [Desenvolvimento](#desenvolvimento)
+4. [Tráfego e site map](#tráfego-e-site-map)
+5. [LLM: provedores e chave própria](#llm-provedores-e-chave-própria)
+6. [Arquivo de escopo](#arquivo-de-escopo)
+7. [Modos de autonomia e aprovações](#modos-de-autonomia-e-aprovações)
+8. [Modelo de segurança](#modelo-de-segurança)
+9. [Referência da CLI](#referência-da-cli)
+10. [Referência da API](#referência-da-api)
+11. [Configuração](#configuração)
+12. [Estrutura do projeto](#estrutura-do-projeto)
+13. [Desenvolvimento](#desenvolvimento)
 
 ---
 
@@ -38,8 +39,8 @@ também **em servidor** (time, com login e projetos compartilhados, na Fase 5).
 |---|---|---|
 | 0 | Guardrails: escopo, política de IP, egress, orçamento, kill switch | ✅ |
 | 1 | Núcleo do agente: policy engine, aprovações, ferramentas, API, chat | ✅ |
-| 2 | Contexto de tráfego: proxy, importação HAR/Burp, site map | ⏳ próxima |
-| 3 | Skills, `/goal` e subagentes | — |
+| 2 | Contexto de tráfego: proxy, importação HAR/Burp, site map | ✅ |
+| 3 | Skills, `/goal` e subagentes | ⏳ próxima |
 | 4 | Interface web | — |
 | 5 | Servidor: Docker, Postgres, SSO, listener OOB, ferramentas externas, CI | — |
 
@@ -48,6 +49,10 @@ Plano completo: [docs/PLANO.md](docs/PLANO.md).
 ## Como funciona
 
 ```
+  navegador ──▶ proxy ──┐      HAR / XML do Burp ──▶ import
+                        ▼                                  │
+                 histórico de tráfego + site map ◀─────────┘
+                        ▲ (o agente lê)
   analista ──▶ chat / API
                   │
                   ▼
@@ -81,7 +86,9 @@ quando `verify_finding` reexecuta a prova de conceito e a evidência bate.
 
 | Burp AT | scopehound |
 |---|---|
-| Ferramentas do Burp | `send_request`, `save_lead`, `verify_finding`, `finish` (mais nas próximas fases) |
+| Ferramentas do Burp | `send_request`, `search_traffic`, `get_request`, `site_map`, `diff_responses`, `save_lead`, `verify_finding`, `finish` |
+| Proxy history e site map | `scopehound proxy` + histórico + site map normalizado (`/api/Users/{id}`) |
+| Contexto do projeto (site map, tráfego) | O agente consulta o histórico antes de enviar requisições |
 | Scope do Burp, checado antes de agir | `Scope` + `check_url` + política de IP, no egress |
 | Manual / Smart / Autonomous | Mesmos modos, no policy engine |
 | Ask / Act por ferramenta | `scopehound project tool` / `PUT /projects/{id}/tools/{tool}` |
@@ -143,6 +150,75 @@ Ou use a API (documentação interativa em `http://127.0.0.1:8787/docs`):
 ```bash
 uv run scopehound serve
 ```
+
+## Tráfego e site map
+
+O agente trabalha melhor com contexto: o que você já navegou no app. O
+histórico do projeto junta três origens, e **só guarda o que está no escopo**:
+
+| Origem | Como |
+|---|---|
+| Proxy | `scopehound proxy lab` e navegue com o navegador apontado para ele |
+| Importação | `scopehound import lab arquivo.har` ou o XML do Burp ("Save items") |
+| Agente | Toda requisição do agente entra no histórico, com o id da tarefa |
+
+**Proxy de captura** (requer `scopehound serve` rodando):
+
+```bash
+uv sync --extra proxy
+```
+
+```bash
+uv run scopehound serve
+```
+
+```bash
+uv run scopehound proxy lab --port 8081
+```
+
+Configure o navegador (ou uma extensão como FoxyProxy) para usar
+`127.0.0.1:8081` e instale o certificado do mitmproxy em `http://mitm.it`
+para capturar HTTPS. O proxy escuta só em 127.0.0.1 e repassa toda a sua
+navegação, mas o projeto só guarda o que estiver no escopo. O agente nunca
+usa o proxy: ele fala com a rede apenas pelo egress.
+
+**Importar o que o time já capturou no Burp**: em Proxy › HTTP history,
+selecione os itens › botão direito › *Save items* (com "Base64-encode"
+marcado). Depois:
+
+```bash
+uv run scopehound import lab itens-burp.xml
+```
+
+O XML é lido com `defusedxml`: entidades externas (XXE) são recusadas.
+
+**Site map**: paths com segmentos variáveis são normalizados (`{id}`,
+`{uuid}`, `{hash}`, `{token}`) e os parâmetros observados ficam anotados
+com a origem (`path`, `query`, `form`, `json`, `cookie`). `#num` indica que
+todos os valores vistos eram numéricos, um bom ponto de partida para IDOR.
+
+```
+$ uv run scopehound sitemap lab
+http://localhost:3000
+  POST    /api/BasketItems  ×1 [201] ex:a650caf71b06
+          params: BasketId[json#num], ProductId[json#num], quantity[json#num]
+  GET     /api/Products/{id}  ×2 [200] ex:249047589553
+          params: {id}#3[path#num]
+  GET     /rest/products/search  ×1 [200] ex:189017d53cc2
+          params: q[query]
+```
+
+**Ferramentas do agente** (todas de leitura, liberadas no modo smart):
+
+| Ferramenta | Faz |
+|---|---|
+| `site_map` | Mapa do alvo com endpoints, métodos e parâmetros |
+| `search_traffic` | Busca por texto, host, método, path, status, parâmetro ou origem |
+| `get_request` | Requisição e resposta completas de uma troca (id ou prefixo de 8+) |
+| `diff_responses` | Compara duas respostas: status, tamanho, cabeçalhos e corpo |
+
+> O histórico guarda cookies e tokens da sua navegação, e as ferramentas os
+> mostram ao modelo. Com dados reais, use um LLM local (`--local-only`).
 
 ## LLM: provedores e chave própria
 
@@ -264,6 +340,10 @@ Nenhuma destas regras depende do modelo, e nenhum prompt as altera.
 | `scopehound project llm PROJETO [--base-url] [--model] [--api-key] [--clear-api-key]` | Define o LLM do projeto, inclusive com a sua chave |
 | `scopehound project tool PROJETO FERRAMENTA [--enable/--disable] [--manual ask\|act]` | Liga/desliga ferramentas e define Ask/Act |
 | `scopehound chat PROJETO [--task ID] [--mode MODO]` | Conversa no terminal, com aprovações interativas |
+| `scopehound proxy PROJETO [--port 8081] [--api URL]` | Proxy de captura (extra `proxy`; requer `serve`) |
+| `scopehound import PROJETO ARQUIVO [--format har\|burp]` | Importa HAR ou XML do Burp |
+| `scopehound sitemap PROJETO [--host]` | Mostra o site map |
+| `scopehound traffic PROJETO [-t TEXTO] [--limit N]` | Lista o histórico |
 | `scopehound serve [--host] [--port]` | Sobe a API (no modo local, só em 127.0.0.1) |
 | `scopehound version` | Mostra a versão |
 
@@ -277,6 +357,10 @@ Nenhuma destas regras depende do modelo, e nenhum prompt as altera.
 | `GET /projects/{id}/tools` · `PUT /projects/{id}/tools/{tool}` | Ferramentas (enabled, Ask/Act) |
 | `POST /projects/{id}/kill` · `POST /projects/{id}/revive` | Kill switch |
 | `GET /projects/{id}/leads` · `GET /projects/{id}/audit` | Leads e auditoria |
+| `POST /projects/{id}/traffic` | Recebe trocas (usado pelo proxy; até 500 por chamada) |
+| `POST /projects/{id}/traffic/import?filename=&format=` | Importa HAR ou XML do Burp (corpo da requisição) |
+| `GET /projects/{id}/traffic` · `GET /projects/{id}/traffic/{troca}` | Histórico (filtros: `text`, `host`, `method`, `path_contains`, `status`, `param`, `source`) |
+| `GET /projects/{id}/sitemap[?host=]` | Site map em JSON |
 | `POST /projects/{id}/tasks` · `GET /projects/{id}/tasks` | Tarefas (rodam em segundo plano) |
 | `GET /tasks/{id}` · `PATCH /tasks/{id}` | Tarefa e troca de modo |
 | `GET /tasks/{id}/messages` · `POST /tasks/{id}/messages` | Conversa |
@@ -323,6 +407,7 @@ src/scopehound/
 ├── guardrails/   escopo, política de IP, egress, orçamento, kill switch, rate limit
 ├── policy/       modos de autonomia, Ask/Act, regras de aprovação
 ├── tools/        ferramentas do agente (schema + impacto + execução)
+├── traffic/      histórico, importadores HAR/Burp, site map, addon do mitmproxy
 ├── agent/        grafo LangGraph, prompt, provedor de LLM, modelo roteirizado
 ├── core/         runtime, casos de uso, execução de tarefas, eventos
 ├── store/        modelos SQLAlchemy e migrações Alembic
@@ -344,8 +429,9 @@ uv run ruff check && uv run ruff format --check && uv run pytest
 
 Os testes não usam LLM real nem rede externa. O agente roda com um modelo
 roteirizado (`agent/fake.py`) e o alvo é simulado. Um dos testes cobre o
-critério de pronto da Fase 1: pedir aprovação, pausar, reiniciar o processo,
-retomar e registrar um lead.
+critério de pronto de cada fase: na Fase 1, pedir aprovação, pausar, reiniciar
+o processo, retomar e registrar um lead; na Fase 2, responder quais endpoints
+recebem IDs numéricos usando só o tráfego do projeto.
 
 Nova migração depois de alterar `store/models.py`:
 

@@ -8,6 +8,7 @@ dependencies = [
     "aiosqlite>=0.22.1",
     "alembic>=1.20.1",
     "cryptography>=50.0.2",
+    "defusedxml>=0.7.1",
     "fastapi>=0.162.4",
     "httpx>=0.27",
     "langchain-core>=1.7.7",
@@ -25,8 +26,18 @@ dependencies = [
 [project.scripts]
 scopehound = "scopehound.cli:app"
 
+[project.optional-dependencies]
+proxy = [
+    "mitmproxy>=12.3.1",
+]
+
 [dependency-groups]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.6"]
+dev = [
+    "mitmproxy>=12.3.1",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+]
 
 [build-system]
 requires = ["hatchling"]

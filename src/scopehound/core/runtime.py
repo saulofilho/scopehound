@@ -21,6 +21,7 @@ from ..secrets import SecretBox, load_secret_key
 from ..store import Action, Approval, AuditLog, Database, Lead, Project, Task, run_migrations
 from ..store.models import utcnow
 from ..tools import ToolContext
+from ..traffic import TrafficStore
 from .errors import NotFound
 from .events import EventBus
 from .runner import TaskRunner
@@ -116,6 +117,9 @@ class Runtime:
         return self.llm_factory(self.llm_config(project))
 
     # ---- guardrails por projeto ------------------------------------------
+    def traffic(self, project: Project) -> TrafficStore:
+        return TrafficStore(self.db, project.id, Scope.model_validate(project.scope))
+
     def kill_switch(self, project: Project) -> KillSwitch:
         ks = self._kill.get(project.id)
         if ks is None:
@@ -167,7 +171,8 @@ class Runtime:
             return await self.confirm_lead(project.id, lead_id, evidence)
 
         try:
-            yield ToolContext(project.id, task_id, egress, save_lead, confirm_lead)
+            traffic = TrafficStore(self.db, project.id, scope, task_id)
+            yield ToolContext(project.id, task_id, egress, save_lead, confirm_lead, traffic)
         finally:
             await egress.aclose()
             await self.add_usage(task_id, requests=budget.requests - task.requests_used)

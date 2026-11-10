@@ -340,3 +340,48 @@ async def list_audit(rt: Runtime, project_id: str, limit: int = 200) -> list[Aud
                 .limit(limit)
             )
         )
+
+
+# ---- tráfego -------------------------------------------------------------
+async def ingest_traffic(rt: Runtime, project_id: str, exchanges: list, source: str):
+    from ..traffic import ExchangeIn
+
+    project = await rt.get_project(project_id)
+    items = [e if isinstance(e, ExchangeIn) else ExchangeIn.from_json(e) for e in exchanges]
+    return await rt.traffic(project).ingest(items, source)
+
+
+async def import_traffic(
+    rt: Runtime, project_id: str, text: str, *, filename: str = "", fmt: str | None = None
+):
+    from ..traffic.importers import detect_format, parse_traffic
+
+    try:
+        fmt = fmt or detect_format(filename, text)
+        exchanges = parse_traffic(text, fmt)
+    except ValueError as exc:
+        raise Conflict(f"arquivo inválido: {exc}") from exc
+    except Exception as exc:  # XML malformado ou com entidades proibidas
+        raise Conflict(f"arquivo inválido ({type(exc).__name__}): {exc}") from exc
+    result = await ingest_traffic(rt, project_id, exchanges, fmt)
+    await rt.audit(
+        project_id,
+        "traffic.imported",
+        f"{fmt}: {result.stored} guardadas, {result.skipped_out_of_scope} fora do escopo",
+    )
+    return result
+
+
+async def search_traffic(rt: Runtime, project_id: str, **filters):
+    return await rt.traffic(await rt.get_project(project_id)).search(**filters)
+
+
+async def get_exchange(rt: Runtime, project_id: str, ref: str):
+    row = await rt.traffic(await rt.get_project(project_id)).get(ref)
+    if row is None:
+        raise NotFound(f"troca {ref!r} não encontrada")
+    return row
+
+
+async def sitemap(rt: Runtime, project_id: str, host: str | None = None):
+    return await rt.traffic(await rt.get_project(project_id)).sitemap(host)
