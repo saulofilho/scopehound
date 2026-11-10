@@ -1,6 +1,6 @@
 # scopehound
 
-**O farejador que nunca sai do escopo.** Agente de IA para pentest assistido
+**O farejador que nunca sai do escopo.** · [site](https://saulofilho.github.io/scopehound/) Agente de IA para pentest assistido
 por humano, inspirado na lógica do [Burp AT](https://portswigger.net/burp/burp-at).
 O modelo forma hipóteses e pede ações. **Escopo, permissões e limites são
 impostos por uma camada separada do modelo**, e toda ação fica registrada no
