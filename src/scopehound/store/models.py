@@ -51,6 +51,7 @@ class Project(Base):
     llm_api_key_enc: Mapped[str | None] = mapped_column(Text)
     killed_reason: Mapped[str | None] = mapped_column(Text)
     source_root: Mapped[str | None] = mapped_column(Text)
+    workspace_root: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

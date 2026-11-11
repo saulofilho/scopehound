@@ -417,6 +417,30 @@ async def list_sessions(rt: Runtime, project_id: str):
     return await rt.list_auth_sessions(project_id)
 
 
+async def set_workspace_root(rt: Runtime, project_id: str, path: str | None) -> Project:
+    """Define a pasta read-write do projeto para as ferramentas de arquivo.
+    Recusa pastas reservadas (ex.: o diretório de dados do scopehound)."""
+    from ..fsguard import WorkspaceError, check_not_reserved, resolve_root
+
+    if path:
+        root = resolve_root(path)
+        if not root.is_dir():
+            raise Conflict(f"diretório não encontrado: {path}")
+        try:
+            check_not_reserved(root, [rt.settings.data_dir])
+        except WorkspaceError as exc:
+            raise Conflict(str(exc)) from exc
+        path = str(root)
+    async with rt.db() as session:
+        project = await session.get(Project, project_id)
+        if project is None:
+            raise NotFound(f"projeto {project_id} não encontrado")
+        project.workspace_root = path
+        await session.commit()
+    await rt.audit(project_id, "project.workspace_root", path or "(removido)")
+    return await rt.get_project(project_id)
+
+
 async def set_source_root(rt: Runtime, project_id: str, path: str | None) -> Project:
     from pathlib import Path
 

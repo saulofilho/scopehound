@@ -200,6 +200,10 @@ def create_app(
     async def put_source(project_id: str, body: SourceIn):
         return project_dict(await guard(svc.set_source_root(rt, project_id, body.path)))
 
+    @app.put("/projects/{project_id}/workspace")
+    async def put_workspace(project_id: str, body: SourceIn):
+        return project_dict(await guard(svc.set_workspace_root(rt, project_id, body.path)))
+
     @app.get("/tasks/{task_id}/subtasks")
     async def subtasks(task_id: str):
         return [row_dict(t) for t in await svc.list_subtasks(rt, task_id)]

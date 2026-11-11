@@ -283,11 +283,24 @@ para o agente principal.
 | `content_discovery` | intrusive | Procura caminhos ocultos (wordlist) |
 | `race_request` | intrusive | N requisições concorrentes (condição de corrida) |
 | `read_source` | leitura | Lê um arquivo do código do alvo (dentro da raiz configurada) |
+| `list_files` · `read_file` | leitura | Lista e lê arquivos do workspace do projeto |
+| `write_file` | intrusive | Escreve um arquivo no workspace (confinado; pede aprovação) |
 | `spawn_subagent` | active | Cria uma subtarefa paralela |
 
 `read_source` só funciona se você apontar a raiz do código:
 `scopehound project source lab /caminho/do/repo`. A leitura é confinada a essa
-raiz (sem `..`).
+raiz (sem `..`). O mesmo vale para o **workspace**, uma pasta read-write que
+o agente usa para insumos e saídas (listas de alvos, wordlists, achados):
+
+```bash
+uv run scopehound project workspace lab /caminho/da/pasta
+```
+
+As ferramentas `list_files`, `read_file` e `write_file` ficam confinadas a ela
+— sem `..`, sem caminho absoluto, sem escape por symlink, nunca a pasta de
+dados do scopehound, e a escrita recusa extensões executáveis (`.sh`, `.py`…).
+No modo servidor ficam desligadas por padrão (`SCOPEHOUND_FILE_TOOLS=true`
+para habilitar).
 
 ## LLM: provedores e chave própria
 
@@ -409,6 +422,7 @@ Nenhuma destas regras depende do modelo, e nenhum prompt as altera.
 | `scopehound project llm PROJETO [--base-url] [--model] [--api-key] [--clear-api-key]` | Define o LLM do projeto, inclusive com a sua chave |
 | `scopehound project tool PROJETO FERRAMENTA [--enable/--disable] [--manual ask\|act]` | Liga/desliga ferramentas e define Ask/Act |
 | `scopehound project source PROJETO [CAMINHO]` | Raiz de código para read_source (vazio remove) |
+| `scopehound project workspace PROJETO [CAMINHO]` | Pasta read-write para as ferramentas de arquivo |
 | `scopehound skills` | Lista as skills disponíveis |
 | `scopehound session add PROJETO NOME -H 'Cookie: ...'` | Cadastra uma sessão de autenticação |
 | `scopehound session list PROJETO` | Lista as sessões (sem valores) |
@@ -534,6 +548,7 @@ Variáveis de ambiente com prefixo `SCOPEHOUND_` (ou no `.env`; veja
 | `REDACT` | `auto` | Mascara dados ao LLM: `auto`/`on`/`off` ou categorias |
 | `ENABLE_EXTERNAL_TOOLS` | `false` | Habilita nuclei/ffuf/sqlmap |
 | `OOB_BASE_URL` | — | URL externa do listener OOB |
+| `FILE_TOOLS` | auto | Ferramentas de arquivo: on local, off servidor |
 | `OIDC_ISSUER` / `OIDC_AUDIENCE` / `OIDC_JWKS_URL` | — | OIDC (modo servidor) |
 | `REQUEST_TIMEOUT` | `15` | Segundos |
 | `MAX_RESPONSE_BYTES` | `2000000` | Limite do corpo da resposta |

@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     # listener OOB: URL externa pela qual o alvo alcança /oob/<token>
     oob_base_url: str = ""
 
+    # Ferramentas de arquivo (workspace). None = padrão do modo (ligadas no
+    # local, desligadas no servidor, que é o filesystem de uma máquina
+    # compartilhada). Um bool força o valor.
+    file_tools: bool | None = None
+
     # OIDC (modo servidor)
     oidc_issuer: str = ""
     oidc_audience: str = ""
@@ -71,6 +76,11 @@ class Settings(BaseSettings):
         if self.internal_deny_cidrs is not None:
             return self.internal_deny_cidrs
         return list(DEFAULT_INTERNAL) if self.mode == "server" else []
+
+    def file_tools_enabled(self) -> bool:
+        if self.file_tools is not None:
+            return self.file_tools
+        return self.mode == "local"
 
     def ip_policy(self) -> IpPolicy:
         return IpPolicy.build(

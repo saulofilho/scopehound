@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
+from ..fsguard import WorkspaceError, safe_target
 from ..guardrails import EgressNetworkError, GuardrailError
 from .discovery import DEFAULT_WORDLIST
 
@@ -156,10 +157,9 @@ async def read_source(ctx: ToolContext, a: ReadSourceArgs) -> str:
             "`scopehound project source <projeto> <caminho>` para habilitar read_source."
         )
     try:
-        target = (root / a.path).resolve()
-        target.relative_to(root)
-    except (ValueError, OSError):
-        return f"caminho fora da raiz de código permitida: {a.path!r}"
+        target = safe_target(root, a.path)
+    except WorkspaceError as exc:
+        return f"caminho fora da raiz de código permitida: {exc}"
     if not target.is_file():
         return f"arquivo não encontrado: {a.path}"
     if target.stat().st_size > READ_SOURCE_MAX:

@@ -382,6 +382,24 @@ def project_source(
     typer.echo(f"source_root de {p.name}: {p.source_root or '(nenhum)'}")
 
 
+@project_app.command("workspace")
+def project_workspace(
+    project: str,
+    path: Annotated[
+        str | None, typer.Argument(help="Pasta read-write p/ ler/escrever arquivos; vazio remove")
+    ] = None,
+) -> None:
+    """Define o workspace: pasta onde o agente pode ler e escrever arquivos."""
+    from .core import service as svc
+
+    async def run(rt):
+        p = await svc.find_project(rt, project)
+        return await svc.set_workspace_root(rt, p.id, path)
+
+    p = _with_runtime(run)
+    typer.echo(f"workspace de {p.name}: {p.workspace_root or '(nenhum)'}")
+
+
 @app.command()
 def run(
     project: str,

@@ -208,6 +208,11 @@ class Runtime:
                 return await self.spawn_subagent(project.id, task_id, **kw)
 
             source_root = Path(project.source_root) if project.source_root else None
+            workspace_root = (
+                Path(project.workspace_root)
+                if project.workspace_root and s.file_tools_enabled()
+                else None
+            )
 
             def oob_new() -> tuple[str, str]:
                 token = self.oob.new_token(project.id)
@@ -228,6 +233,7 @@ class Runtime:
                 redactor=self.redactor(project),
                 library=self.library,
                 source_root=source_root,
+                workspace_root=workspace_root,
                 spawn=spawn,
                 scope=scope,
                 external_enabled=s.enable_external_tools,

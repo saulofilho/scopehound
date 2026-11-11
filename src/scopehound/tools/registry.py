@@ -30,6 +30,14 @@ from .extra import (
     read_source,
     replay_as,
 )
+from .files import (
+    ListFilesArgs,
+    ReadFileArgs,
+    WriteFileArgs,
+    list_files,
+    read_file,
+    write_file,
+)
 from .meta import SpawnSubagentArgs, UseSkillArgs, spawn_subagent, use_skill
 from .oob import OobPayloadArgs, OobPollArgs, oob_payload, oob_poll
 
@@ -126,6 +134,7 @@ class ToolContext:
     redactor: Redactor = field(default_factory=lambda: Redactor(frozenset()))
     library: Any = None
     source_root: Path | None = None
+    workspace_root: Path | None = None
     spawn: Callable[..., Awaitable[str]] | None = None
     scope: Any = None
     external_enabled: bool = False
@@ -470,6 +479,35 @@ TOOLS: dict[str, Tool] = {
             ),
             SqlmapArgs,
             sqlmap,
+        ),
+        Tool(
+            ToolSpec(
+                "list_files",
+                "Lista os arquivos do workspace do projeto (pasta read-write configurada).",
+                "read",
+                default_manual="act",
+            ),
+            ListFilesArgs,
+            list_files,
+        ),
+        Tool(
+            ToolSpec(
+                "read_file",
+                "Lê um arquivo do workspace do projeto.",
+                "read",
+                default_manual="act",
+            ),
+            ReadFileArgs,
+            read_file,
+        ),
+        Tool(
+            ToolSpec(
+                "write_file",
+                "Escreve um arquivo no workspace do projeto (confinado; pede aprovação).",
+                "intrusive",
+            ),
+            WriteFileArgs,
+            write_file,
         ),
         Tool(
             ToolSpec(
