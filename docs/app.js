@@ -245,19 +245,39 @@
   var dialog = document.getElementById("dialog");
   var approve = document.getElementById("approve");
   var leads = document.getElementById("leads");
-  var SCRIPT = [
-    ["C:\\LAB> scopehound chat lab", "dim"],
-    ["você › mapeie a API e procure IDOR", ""],
-    ["scopehound › site map: 14 endpoints, 3 com {id}", ""],
-    ["  ↳ site_map()", "dim"],
-    ["  ↳ replay_as GET /rest/basket/6 como userB", "dim"],
-    ["scopehound › userB leu a cesta de userA.", ""],
-    ["  ↳ send_request PUT /api/BasketItems/7", "dim"],
-    ["@dialog"],
-    ["  ✓ aprovado uma vez · 200 OK", "dim"],
-    ["  ↳ verify_finding GET /rest/basket/6", "dim"],
-    ["@verified"]
-  ];
+  var LANG = (document.documentElement.lang || "pt").slice(0, 2) === "en" ? "en" : "pt";
+  var SCRIPTS = {
+    pt: [
+      ["C:\\LAB> scopehound chat lab", "dim"],
+      ["você › mapeie a API e procure IDOR", ""],
+      ["scopehound › site map: 14 endpoints, 3 com {id}", ""],
+      ["  ↳ site_map()", "dim"],
+      ["  ↳ replay_as GET /rest/basket/6 como userB", "dim"],
+      ["scopehound › userB leu a cesta de userA.", ""],
+      ["  ↳ send_request PUT /api/BasketItems/7", "dim"],
+      ["@dialog"],
+      ["  ✓ aprovado uma vez · 200 OK", "dim"],
+      ["  ↳ verify_finding GET /rest/basket/6", "dim"],
+      ["@verified"]
+    ],
+    en: [
+      ["C:\\LAB> scopehound chat lab", "dim"],
+      ["you › map the API and look for IDOR", ""],
+      ["scopehound › site map: 14 endpoints, 3 with {id}", ""],
+      ["  ↳ site_map()", "dim"],
+      ["  ↳ replay_as GET /rest/basket/6 as userB", "dim"],
+      ["scopehound › userB read userA's basket.", ""],
+      ["  ↳ send_request PUT /api/BasketItems/7", "dim"],
+      ["@dialog"],
+      ["  ✓ approved once · 200 OK", "dim"],
+      ["  ↳ verify_finding GET /rest/basket/6", "dim"],
+      ["@verified"]
+    ]
+  };
+  var VERIFIED = LANG === "en"
+    ? " VERIFIED  IDOR in /rest/basket/{id}  [HIGH] "
+    : " VERIFICADO  IDOR em /rest/basket/{id}  [HIGH] ";
+  var SCRIPT = SCRIPTS[LANG];
   var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
 
   function line(text, cls) {
@@ -303,7 +323,7 @@
           approve.classList.remove("pressed");
         } else if (step[0] === "@verified") {
           var v = line("", "inv");
-          v.textContent = " VERIFICADO  IDOR em /rest/basket/{id}  [HIGH] ";
+          v.textContent = VERIFIED;
           addLead();
           await sleep(4200);
         } else {
@@ -317,7 +337,7 @@
       resetScreen();
       SCRIPT.forEach(function (s) {
         if (s[0] === "@verified") {
-          line("", "inv").textContent = " VERIFICADO  IDOR em /rest/basket/{id}  [HIGH] ";
+          line("", "inv").textContent = VERIFIED;
           addLead();
         } else if (s[0][0] !== "@") {
           line("", s[1]).textContent = s[0];

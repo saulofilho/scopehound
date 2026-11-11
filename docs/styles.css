@@ -101,7 +101,7 @@ u { text-decoration-thickness: 1px; text-underline-offset: 2px; }
 .menubar nav { display: flex; gap: 2px; margin-left: 8px; }
 .menubar nav a { color: var(--k); text-decoration: none; font: 400 14px/1 var(--mono); padding: 8px 10px; }
 .menubar nav a:hover { background: var(--k); color: var(--w); }
-.menubar .btn95 { margin-left: auto; }
+.menubar .btn95 { margin-left: 12px; }
 
 /* ---------- hero ---------- */
 .hero { position: relative; padding: 88px 16px 0; text-align: center; overflow: hidden; }
@@ -355,3 +355,11 @@ main > .sec { max-width: var(--largura); margin: 0 auto; padding: 120px 24px 0; 
   .neck, .base { height: 16px; }
   .sparkle { display: none; }
 }
+
+/* seletor de idioma */
+.lang-switch { display: inline-flex; gap: 2px; margin-left: auto; font: 400 12px/1 var(--mono); align-items: center; }
+.menubar .btn95 { margin-left: 12px; }
+.lang-switch strong, .lang-switch a { padding: 5px 7px; border: 2px solid var(--k); }
+.lang-switch strong { background: var(--k); color: var(--w); font-weight: 400; }
+.lang-switch a { color: var(--k); text-decoration: none; }
+.lang-switch a:hover { background: var(--k); color: var(--w); }

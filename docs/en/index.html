@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>scopehound — the hound that never leaves the scope</title>
+<meta name="description" content="A human-led pentest AI agent, inspired by the logic of Burp AT. Scope and permissions live outside the model — no prompt bypasses them. Runs local or on a server." />
+<link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="scopehound — the hound that never leaves the scope" />
+<meta property="og:description" content="A human-led pentest AI agent. Scope and permissions live outside the model." />
+<meta property="og:image" content="https://saulofilho.github.io/scopehound/og.png" />
+<meta property="og:url" content="https://saulofilho.github.io/scopehound/en/" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Pixelify+Sans:wght@400;500;600;700&family=Silkscreen&family=VT323&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+<a class="skip" href="#conteudo">Skip to content</a>
+
+<header class="menubar" id="topo">
+  <a class="brand" href="#topo" aria-label="scopehound, home">
+    <i class="px" data-px="hound" aria-hidden="true"></i>
+    <span>scopehound</span>
+  </a>
+  <nav aria-label="Sections">
+    <a href="#metodo"><u>M</u>ethod</a>
+    <a href="#recursos"><u>F</u>eatures</a>
+    <a href="#pista"><u>L</u>ead</a>
+    <a href="#burp"><u>B</u>urp AT</a>
+    <a href="#comecar"><u>S</u>tart</a>
+  </nav>
+  <span class="lang-switch" aria-label="Language">
+    <a href="../">PT</a><strong>EN</strong>
+  </span>
+  <a class="btn95 small" href="https://github.com/saulofilho/scopehound">GitHub</a>
+</header>
+
+<main id="conteudo">
+
+  <section class="hero">
+    <div class="stars" aria-hidden="true"></div>
+    <div class="hero-copy">
+      <p class="kicker">Human-led pentest · open source</p>
+      <h1>The hound that never leaves the scope.</h1>
+      <p class="lede">An AI agent that follows the scent, forms hypotheses and calls tools — but scope and permissions live <mark>outside the model</mark>. No prompt bypasses them. Inspired by the logic of <a href="https://portswigger.net/burp/burp-at">Burp AT</a>.</p>
+      <div class="cta">
+        <a class="btn95" href="#comecar">Start the case</a>
+        <a class="btn95 ghost" href="https://github.com/saulofilho/scopehound">See on GitHub</a>
+      </div>
+      <code class="prompt" data-copy="git clone https://github.com/saulofilho/scopehound" tabindex="0" role="button" aria-label="Copy git clone command">C:\&gt; git clone github.com/saulofilho/scopehound<span class="caret"></span></code>
+    </div>
+
+    <figure class="monitor" aria-label="Illustration: an old computer running scopehound on a Windows 95 style desktop">
+      <div class="case">
+        <div class="bezel">
+          <div class="screen">
+            <div class="desktop">
+              <ul class="icons" aria-hidden="true">
+                <li><i class="px" data-px="computer"></i><span>My scope</span></li>
+                <li><i class="px" data-px="folder"></i><span>Leads</span></li>
+                <li><i class="px" data-px="bin"></i><span>Blocked</span></li>
+              </ul>
+
+              <div class="win w-main">
+                <div class="title"><span>scopehound.exe — chat lab</span><b class="ctl" aria-hidden="true"><i>_</i><i>□</i><i>×</i></b></div>
+                <div class="menu" aria-hidden="true"><span><u>F</u>ile</span><span><u>T</u>ask</span><span><u>M</u>ode: smart</span><span><u>H</u>elp</span></div>
+                <pre class="term" id="term" aria-live="off"></pre>
+              </div>
+
+              <div class="win w-leads">
+                <div class="title"><span>leads.txt</span><b class="ctl" aria-hidden="true"><i>_</i><i>×</i></b></div>
+                <ul class="leads" id="leads">
+                  <li><b>[LOW]</b> missing CSP on /</li>
+                  <li><b>[MED]</b> enumeration on /login</li>
+                </ul>
+              </div>
+
+              <div class="win w-dialog" id="dialog" hidden>
+                <div class="title"><span>Approval required</span><b class="ctl" aria-hidden="true"><i>×</i></b></div>
+                <div class="dlg-body">
+                  <i class="px" data-px="warn" aria-hidden="true"></i>
+                  <p>The agent wants to run:<br><code>send_request PUT /api/BasketItems/7</code><br>Impact: <b>intrusive</b></p>
+                </div>
+                <div class="dlg-btns">
+                  <span class="btn95 tiny default" id="approve">Approve</span>
+                  <span class="btn95 tiny">Session</span>
+                  <span class="btn95 tiny">Reject</span>
+                </div>
+              </div>
+
+              <div class="yard" aria-hidden="true">
+                <span class="fence l"></span>
+                <span class="trail" id="trail"></span>
+                <i class="px hound" data-px="hound" id="hound"></i>
+                <span class="fence r"></span>
+                <span class="yard-label">scope</span>
+              </div>
+            </div>
+
+            <div class="taskbar" aria-hidden="true">
+              <span class="start"><i class="px" data-px="hound"></i>Start</span>
+              <span class="task on">scopehound.exe</span>
+              <span class="task">leads.txt</span>
+              <span class="tray" id="clock">00:00</span>
+            </div>
+            <div class="scan" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="plate">
+          <span class="badge"><i class="px" data-px="hound" aria-hidden="true"></i>SCOPEHOUND 95</span>
+          <span class="vents" aria-hidden="true"></span>
+          <span class="led" aria-hidden="true"></span>
+        </div>
+      </div>
+      <div class="neck" aria-hidden="true"></div>
+      <div class="base" aria-hidden="true"></div>
+    </figure>
+    <div class="ground" aria-hidden="true"></div>
+  </section>
+
+  <section class="sec" id="metodo">
+    <header class="sec-head">
+      <p class="kicker">01 · the method</p>
+      <h2>The model asks. The policy decides. The tool runs.</h2>
+      <p>At every step, a guardrails layer separate from the model validates scope, DNS, budget and permission before any request goes out. Same idea as Burp AT: the rule does not live in the prompt.</p>
+    </header>
+    <div class="win big">
+      <div class="title"><span>Control Panel — Policy</span><b class="ctl" aria-hidden="true"><i>_</i><i>□</i><i>×</i></b></div>
+      <div class="pane">
+        <ol class="flow">
+          <li><span class="step">1</span><strong>Agent</strong><p>forms hypotheses and asks for a tool</p></li>
+          <li class="mid"><span class="step">2</span><strong>Policy</strong><p>allows, asks or denies — Ask / Act</p></li>
+          <li><span class="step">3</span><strong>Tools</strong><p>only what was allowed, through the egress</p></li>
+        </ol>
+        <fieldset class="group">
+          <legend>Guardrails (enforced outside the model)</legend>
+          <ul class="checks">
+            <li><span class="cb" aria-hidden="true"></span>Scope</li>
+            <li><span class="cb" aria-hidden="true"></span>DNS pinning</li>
+            <li><span class="cb" aria-hidden="true"></span>Budget</li>
+            <li><span class="cb" aria-hidden="true"></span>Kill switch</li>
+            <li><span class="cb" aria-hidden="true"></span>Rate limit</li>
+            <li><span class="cb" aria-hidden="true"></span>Audit</li>
+          </ul>
+        </fieldset>
+        <div class="pane-btns"><span class="btn95 tiny default">OK</span><span class="btn95 tiny">Cancel</span><span class="btn95 tiny">Apply</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="recursos">
+    <header class="sec-head">
+      <p class="kicker">02 · the scent</p>
+      <h2>Everything a detective needs — inside the fence.</h2>
+    </header>
+    <div class="win big">
+      <div class="title"><span>Exploring — C:\scopehound\features</span><b class="ctl" aria-hidden="true"><i>_</i><i>□</i><i>×</i></b></div>
+      <div class="address"><span>Address</span><code>C:\scopehound\features</code></div>
+      <div class="files">
+        <article><i class="px" data-px="lock" aria-hidden="true"></i><h3>Scope that can't be bypassed</h3><p>Authorized host, port, path and method. Connects to the validated IP (DNS pinning), blocks cloud metadata and internal networks. Out of scope, nothing goes out.</p></article>
+        <article><i class="px" data-px="book" aria-hidden="true"></i><h3>Skills with methodology</h3><p>IDOR, content discovery and race condition ready to go. The skill loads the playbook and restricts the tools to that work.</p></article>
+        <article><i class="px" data-px="lens" aria-hidden="true"></i><h3>Case context</h3><p>Capture proxy, HAR and Burp XML import, and a site map that normalizes <code>/api/users/{id}</code> and flags numeric parameters.</p></article>
+        <article><i class="px" data-px="check" aria-hidden="true"></i><h3>Approvals at your pace</h3><p>Manual, Smart or Autonomous. Approve once, for the session, always, reject or redirect. The pause survives restarts.</p></article>
+        <article><i class="px" data-px="target" aria-hidden="true"></i><h3>/goal and subagents</h3><p>Give it a goal and the agent pursues it across steps; for broad investigations, it splits the work into subagents with their own budget.</p></article>
+        <article><i class="px" data-px="computer" aria-hidden="true"></i><h3>Local or server</h3><p>Run on your machine with SQLite, or deploy for the team with Postgres, SSO login, roles and masking of sensitive data.</p></article>
+      </div>
+      <div class="status"><span>6 object(s)</span><span>Scope: authorized</span></div>
+    </div>
+  </section>
+
+  <section class="sec" id="pista">
+    <header class="sec-head">
+      <p class="kicker">03 · the lead</p>
+      <h2>A lead only becomes a finding when the proof matches.</h2>
+      <p>The agent records leads and re-runs the proof of concept to confirm. No finding without reproducible evidence.</p>
+    </header>
+    <div class="win big">
+      <div class="title"><span>MS-DOS Prompt — scopehound chat lab</span><b class="ctl" aria-hidden="true"><i>_</i><i>□</i><i>×</i></b></div>
+      <pre class="dos" role="img" aria-label="Transcript of a scopehound session">C:\LAB&gt; scopehound chat lab --mode smart
+
+you › map the API and look for IDOR
+scopehound › I'll start with the baskets listing.
+  ↳ send_request GET /rest/basket/6
+  ↳ replay_as /rest/basket/6 as userB
+scopehound › userB read userA's basket. Let me prove it.
+  ↳ verify_finding GET /rest/basket/6 (expected: 200 + "UserId":21)
+
+  [ OK ] VERIFIED  IDOR in /rest/basket/{id}  [HIGH]
+
+C:\LAB&gt; <span class="caret"></span></pre>
+    </div>
+  </section>
+
+  <section class="sec" id="burp">
+    <header class="sec-head">
+      <p class="kicker">04 · the reference</p>
+      <h2>The logic of Burp AT, for local development.</h2>
+      <p>The team already uses Burp AT. scopehound brings the same architecture outside Burp — and it runs on a server too.</p>
+    </header>
+    <div class="pair">
+      <div class="win">
+        <div class="title"><span>burp_at.txt — Notepad</span><b class="ctl" aria-hidden="true"><i>×</i></b></div>
+        <div class="menu" aria-hidden="true"><span><u>F</u>ile</span><span><u>E</u>dit</span><span><u>S</u>earch</span></div>
+        <ul class="note">
+          <li>Agent inside Burp Suite Pro</li>
+          <li>Scope checked before acting</li>
+          <li>Manual / Smart / Autonomous</li>
+          <li>Skills bank</li>
+          <li>Project file and Logger</li>
+        </ul>
+      </div>
+      <div class="win">
+        <div class="title"><span>scopehound.txt — Notepad</span><b class="ctl" aria-hidden="true"><i>×</i></b></div>
+        <div class="menu" aria-hidden="true"><span><u>F</u>ile</span><span><u>E</u>dit</span><span><u>S</u>earch</span></div>
+        <ul class="note">
+          <li>Agent local or on a server, open source</li>
+          <li>Scope enforced at the egress, outside the model</li>
+          <li>Same three autonomy modes</li>
+          <li>File-based skills, yours included</li>
+          <li>Project in SQLite/Postgres with audit</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="comecar">
+    <header class="sec-head">
+      <p class="kicker">05 · to work</p>
+      <h2>Release the hound.</h2>
+      <p>Python 3.12+ and <a href="https://docs.astral.sh/uv/">uv</a>. Point it only at systems you own or are authorized in writing to test.</p>
+    </header>
+    <div class="win big wizard">
+      <div class="title"><span>scopehound Setup Wizard</span><b class="ctl" aria-hidden="true"><i>×</i></b></div>
+      <div class="wiz">
+        <div class="wiz-side" aria-hidden="true"><i class="px" data-px="hound"></i></div>
+        <div class="wiz-main">
+          <h3>Welcome to the scopehound wizard</h3>
+          <p>Follow the steps below to configure the scope and release the hound in your lab.</p>
+          <pre class="dos small"><span class="c">REM install and configure the scope</span>
+git clone https://github.com/saulofilho/scopehound
+cd scopehound &amp;&amp; uv sync
+cp scope.example.yaml scope.yaml
+
+<span class="c">REM check the target without sending anything</span>
+uv run scopehound check http://localhost:3000 -s scope.yaml
+
+<span class="c">REM create the project and chat with the agent</span>
+uv run scopehound project create lab -s scope.yaml
+uv run scopehound chat lab --mode smart</pre>
+          <div class="pane-btns">
+            <a class="btn95 tiny" href="https://github.com/saulofilho/scopehound/blob/main/README.en.md">&lt; Read the docs</a>
+            <a class="btn95 tiny default" href="https://github.com/saulofilho/scopehound">See on GitHub &gt;</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="win alert" role="note">
+      <div class="title"><span>Security notice</span><b class="ctl" aria-hidden="true"><i>×</i></b></div>
+      <div class="dlg-body">
+        <i class="px" data-px="warn" aria-hidden="true"></i>
+        <p><b>Authorized use only.</b> The scope file is the contract: anything not in it is blocked before any I/O. Point scopehound only at systems you own or have written permission to test.</p>
+      </div>
+      <div class="dlg-btns"><a class="btn95 tiny default" href="#comecar">OK</a></div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="taskbar foot">
+  <a class="start" href="#topo"><i class="px" data-px="hound" aria-hidden="true"></i>Start</a>
+  <span class="task on">scopehound — the hound that never leaves the scope</span>
+  <nav class="foot-links" aria-label="Links">
+    <a href="https://github.com/saulofilho/scopehound">GitHub</a>
+    <a href="https://github.com/saulofilho/scopehound/blob/main/README.en.md">Docs</a>
+    <a href="https://portswigger.net/burp/burp-at">Burp AT</a>
+  </nav>
+  <span class="tray" id="clock2">00:00</span>
+</footer>
+
+<script src="../app.js"></script>
+</body>
+</html>
