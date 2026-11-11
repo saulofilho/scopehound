@@ -135,7 +135,7 @@ async def test_acceptance_agent_answers_from_project_data(harness):
 
 async def test_agent_requests_are_recorded_and_diffable(harness):
     def diff_step(msgs):
-        ids = [m.content.split("[troca ")[1][:12] for m in msgs if m.type == "tool"]
+        ids = [m.content.split("[exchange ")[1][:12] for m in msgs if m.type == "tool"]
         return tool_call("diff_responses", {"id_a": ids[0], "id_b": ids[1]}, "c3")
 
     harness.model.script = [

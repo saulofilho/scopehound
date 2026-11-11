@@ -71,7 +71,7 @@ async def test_smart_get_runs_without_approval(harness):
         assert task.status == "idle"
         assert len(harness.target.requests) == 1
         tool_msg = harness.model.calls[-1][-1]
-        assert "nao_confiaveis" in tool_msg.content and "outro@lab" in tool_msg.content
+        assert "untrusted_target_data" in tool_msg.content and "outro@lab" in tool_msg.content
 
 
 async def test_redirect_rejects_and_passes_instruction(harness):

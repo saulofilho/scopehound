@@ -22,6 +22,7 @@ import httpx
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from ..i18n import t
 from .errors import ScopeViolation
 
 IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
@@ -75,7 +76,7 @@ class Scope(BaseModel):
     @classmethod
     def _authorized_by(cls, v: str) -> str:
         if not v.strip():
-            raise ValueError("authorized_by é obrigatório")
+            raise ValueError(t("authorized_by é obrigatório", "authorized_by is required"))
         return v.strip()
 
     @field_validator("allowed_hosts")
@@ -97,7 +98,12 @@ class Scope(BaseModel):
                 suffix = host
             labels = suffix.split(".")
             if not suffix or not all(_LABEL.match(label) for label in labels):
-                raise ValueError(f"host inválido: {raw!r} (curinga só no formato '*.dominio')")
+                raise ValueError(
+                    t(
+                        f"host inválido: {raw!r} (curinga só no formato '*.dominio')",
+                        f"invalid host: {raw!r} (wildcard only as '*.domain')",
+                    )
+                )
             out.append(host)
         return out
 
@@ -109,7 +115,12 @@ class Scope(BaseModel):
             net = ipaddress.ip_network(raw, strict=False)
             minimum = 8 if net.version == 4 else 32
             if net.prefixlen < minimum:
-                raise ValueError(f"faixa ampla demais: {raw!r} (mínimo /{minimum})")
+                raise ValueError(
+                    t(
+                        f"faixa ampla demais: {raw!r} (mínimo /{minimum})",
+                        f"range too broad: {raw!r} (minimum /{minimum})",
+                    )
+                )
             out.append(str(net))
         return out
 
@@ -117,7 +128,7 @@ class Scope(BaseModel):
     @classmethod
     def _ports(cls, v: list[int] | None) -> list[int] | None:
         if v is not None and any(not 1 <= p <= 65535 for p in v):
-            raise ValueError("porta fora de 1-65535")
+            raise ValueError(t("porta fora de 1-65535", "port out of 1-65535"))
         return v
 
     @field_validator("allowed_paths", "exclude_paths")
@@ -125,7 +136,9 @@ class Scope(BaseModel):
     def _paths(cls, v: list[str]) -> list[str]:
         for p in v:
             if not p.startswith("/"):
-                raise ValueError(f"path precisa começar com '/': {p!r}")
+                raise ValueError(
+                    t(f"path precisa começar com '/': {p!r}", f"path must start with '/': {p!r}")
+                )
         return v
 
     @field_validator("allowed_methods")
@@ -134,7 +147,12 @@ class Scope(BaseModel):
         out = [m.upper() for m in v]
         unknown = set(out) - HTTP_METHODS
         if unknown:
-            raise ValueError(f"métodos não suportados: {sorted(unknown)}")
+            raise ValueError(
+                t(
+                    f"métodos não suportados: {sorted(unknown)}",
+                    f"unsupported methods: {sorted(unknown)}",
+                )
+            )
         return out
 
     def networks(self) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
@@ -171,9 +189,16 @@ def normalize_path(raw_path: str) -> str:
     path = raw_path.split("?", 1)[0].split("#", 1)[0] or "/"
     decoded = unquote(path, errors="replace")
     if _PERCENT_ESCAPE.search(decoded):
-        raise ScopeViolation(f"codificação dupla no path: {raw_path!r}")
+        raise ScopeViolation(
+            t(f"codificação dupla no path: {raw_path!r}", f"double encoding in path: {raw_path!r}")
+        )
     if _FORBIDDEN_URL_CHARS.search(decoded):
-        raise ScopeViolation(f"caractere proibido no path: {raw_path!r}")
+        raise ScopeViolation(
+            t(
+                f"caractere proibido no path: {raw_path!r}",
+                f"forbidden character in path: {raw_path!r}",
+            )
+        )
     segments: list[str] = []
     for raw_segment in decoded.split("/"):
         segment = raw_segment.split(";", 1)[0]
@@ -181,7 +206,12 @@ def normalize_path(raw_path: str) -> str:
             continue
         if segment == "..":
             if not segments:
-                raise ScopeViolation(f"path sobe acima da raiz: {raw_path!r}")
+                raise ScopeViolation(
+                    t(
+                        f"path sobe acima da raiz: {raw_path!r}",
+                        f"path climbs above root: {raw_path!r}",
+                    )
+                )
             segments.pop()
             continue
         segments.append(segment)
@@ -221,39 +251,63 @@ def check_url(scope: Scope, url: str | httpx.URL) -> Target:
     """Valida a URL contra o escopo. Levanta `ScopeViolation` se não passar."""
     text = str(url)
     if len(text) > MAX_URL_LENGTH:
-        raise ScopeViolation("URL longa demais")
+        raise ScopeViolation(t("URL longa demais", "URL too long"))
     if _FORBIDDEN_URL_CHARS.search(text):
-        raise ScopeViolation(f"caractere proibido na URL: {text!r}")
+        raise ScopeViolation(
+            t(f"caractere proibido na URL: {text!r}", f"forbidden character in URL: {text!r}")
+        )
     try:
         parsed = httpx.URL(text)
     except httpx.InvalidURL as exc:
-        raise ScopeViolation(f"URL inválida: {exc}") from exc
+        raise ScopeViolation(t(f"URL inválida: {exc}", f"invalid URL: {exc}")) from exc
 
     scheme = parsed.scheme.lower()
     if scheme not in scope.allowed_schemes:
-        raise ScopeViolation(f"esquema '{scheme}' fora do escopo")
+        raise ScopeViolation(
+            t(f"esquema '{scheme}' fora do escopo", f"scheme '{scheme}' out of scope")
+        )
     if parsed.userinfo:
-        raise ScopeViolation("URL com credenciais embutidas (user@host) não é permitida")
+        raise ScopeViolation(
+            t(
+                "URL com credenciais embutidas (user@host) não é permitida",
+                "URL with embedded credentials (user@host) is not allowed",
+            )
+        )
 
     host = _normalize_host(parsed.raw_host.decode("ascii"))
     if not host:
-        raise ScopeViolation(f"URL sem host: {text!r}")
+        raise ScopeViolation(t(f"URL sem host: {text!r}", f"URL without host: {text!r}"))
     ip = _parse_ip(host)
     if ip is not None:
         host = str(ip)
     if not _host_allowed(scope, host, ip):
-        raise ScopeViolation(f"host '{host}' fora do escopo autorizado")
+        raise ScopeViolation(
+            t(
+                f"host '{host}' fora do escopo autorizado",
+                f"host '{host}' outside the authorized scope",
+            )
+        )
 
     port = parsed.port or DEFAULT_PORTS[scheme]
     if scope.allowed_ports is not None and port not in scope.allowed_ports:
-        raise ScopeViolation(f"porta {port} fora do escopo")
+        raise ScopeViolation(t(f"porta {port} fora do escopo", f"port {port} out of scope"))
 
     path = normalize_path(parsed.raw_path.decode("ascii"))
     if not any(fnmatchcase(path, p) for p in scope.allowed_paths):
-        raise ScopeViolation(f"path '{path}' fora do escopo autorizado")
+        raise ScopeViolation(
+            t(
+                f"path '{path}' fora do escopo autorizado",
+                f"path '{path}' outside the authorized scope",
+            )
+        )
     excluded = _excluded_by(path, scope.exclude_paths)
     if excluded:
-        raise ScopeViolation(f"path '{path}' explicitamente excluído ({excluded})")
+        raise ScopeViolation(
+            t(
+                f"path '{path}' explicitamente excluído ({excluded})",
+                f"path '{path}' explicitly excluded ({excluded})",
+            )
+        )
 
     return Target(url=parsed, scheme=scheme, host=host, port=port, path=path, host_ip=ip)
 
@@ -261,7 +315,12 @@ def check_url(scope: Scope, url: str | httpx.URL) -> Target:
 def check_method(scope: Scope, method: str) -> str:
     normalized = method.upper()
     if normalized not in scope.allowed_methods:
-        raise ScopeViolation(f"método '{normalized}' não permitido no escopo")
+        raise ScopeViolation(
+            t(
+                f"método '{normalized}' não permitido no escopo",
+                f"method '{normalized}' not allowed in scope",
+            )
+        )
     return normalized
 
 

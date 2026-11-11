@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 from .guardrails.errors import GuardrailError
+from .i18n import t
 
 # Extensões que podem virar execução/código mais tarde: recusadas na escrita.
 BLOCKED_WRITE_SUFFIXES = frozenset(
@@ -69,16 +70,27 @@ def safe_target(root: Path, rel: str, *, for_write: bool = False) -> Path:
     """
     rel = rel.strip()
     if not rel or rel in (".", "./"):
-        raise WorkspaceError("informe um caminho de arquivo dentro do workspace")
+        raise WorkspaceError(
+            t(
+                "informe um caminho de arquivo dentro do workspace",
+                "provide a file path inside the workspace",
+            )
+        )
     candidate = Path(rel)
     if candidate.is_absolute() or candidate.drive or candidate.anchor:
-        raise WorkspaceError(f"caminho absoluto não permitido: {rel!r}")
+        raise WorkspaceError(
+            t(f"caminho absoluto não permitido: {rel!r}", f"absolute path not allowed: {rel!r}")
+        )
     if any(part == ".." for part in candidate.parts):
-        raise WorkspaceError(f"'..' não permitido no caminho: {rel!r}")
+        raise WorkspaceError(
+            t(f"'..' não permitido no caminho: {rel!r}", f"'..' not allowed in path: {rel!r}")
+        )
 
     raw = (root / candidate).resolve() if not for_write else _resolve_for_write(root, candidate)
     if raw != root and root not in raw.parents:
-        raise WorkspaceError(f"caminho escapa do workspace: {rel!r}")
+        raise WorkspaceError(
+            t(f"caminho escapa do workspace: {rel!r}", f"path escapes the workspace: {rel!r}")
+        )
     return raw
 
 
@@ -87,7 +99,12 @@ def _resolve_for_write(root: Path, candidate: Path) -> Path:
     # ou ser criado sob root) e recoloca o nome final sem segui-lo.
     parent = (root / candidate.parent).resolve()
     if parent != root and root not in parent.parents:
-        raise WorkspaceError(f"diretório escapa do workspace: {candidate!s}")
+        raise WorkspaceError(
+            t(
+                f"diretório escapa do workspace: {candidate!s}",
+                f"directory escapes the workspace: {candidate!s}",
+            )
+        )
     return parent / candidate.name
 
 
@@ -97,4 +114,9 @@ def check_not_reserved(root: Path, reserved: list[Path]) -> None:
     for other in reserved:
         other = other.resolve()
         if root == other or root in other.parents or other in root.parents:
-            raise WorkspaceError(f"workspace não pode coincidir com uma pasta reservada: {other}")
+            raise WorkspaceError(
+                t(
+                    f"workspace não pode coincidir com uma pasta reservada: {other}",
+                    f"workspace cannot overlap a reserved folder: {other}",
+                )
+            )

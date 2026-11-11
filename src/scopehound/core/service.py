@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from ..guardrails import Scope
+from ..i18n import t
 from ..policy import MODES_SET, validate_response
 from ..store import Action, Approval, AuditLog, Lead, Project, Task
 from ..store.models import utcnow
@@ -23,7 +24,12 @@ LLM_POLICIES = ("any", "local_only")
 
 def _check_mode(mode: str) -> None:
     if mode not in MODES_SET:
-        raise Conflict(f"modo inválido: {mode} (use manual, smart ou autonomous)")
+        raise Conflict(
+            t(
+                f"modo inválido: {mode} (use manual, smart ou autonomous)",
+                f"invalid mode: {mode} (use manual, smart or autonomous)",
+            )
+        )
 
 
 # ---- projetos ------------------------------------------------------------
@@ -33,12 +39,22 @@ async def create_project(
     try:
         validated = Scope.model_validate(scope)
     except ValidationError as exc:
-        raise Conflict(f"escopo inválido: {exc}") from exc
+        raise Conflict(t(f"escopo inválido: {exc}", f"invalid scope: {exc}")) from exc
     if llm_data_policy not in LLM_POLICIES:
-        raise Conflict(f"llm_data_policy inválida: {llm_data_policy}")
+        raise Conflict(
+            t(
+                f"llm_data_policy inválida: {llm_data_policy}",
+                f"invalid llm_data_policy: {llm_data_policy}",
+            )
+        )
     async with rt.db() as session:
         if await session.scalar(select(Project).where(Project.name == name)):
-            raise Conflict(f"já existe um projeto chamado {name!r}")
+            raise Conflict(
+                t(
+                    f"já existe um projeto chamado {name!r}",
+                    f"a project named {name!r} already exists",
+                )
+            )
         project = Project(
             name=name,
             scope=validated.model_dump(mode="json"),
@@ -67,7 +83,7 @@ async def find_project(rt: Runtime, ref: str) -> Project:
             select(Project).where(Project.name == ref)
         )
     if project is None:
-        raise NotFound(f"projeto {ref!r} não encontrado")
+        raise NotFound(t(f"projeto {ref!r} não encontrado", f"project {ref!r} not found"))
     return project
 
 
@@ -84,11 +100,13 @@ async def set_llm_config(
     """Configura o LLM do projeto, inclusive com a chave do próprio usuário.
     A chave é guardada criptografada e nunca é devolvida."""
     if provider is not None and provider not in ("openai_compat", "fake"):
-        raise Conflict(f"provedor inválido: {provider}")
+        raise Conflict(t(f"provedor inválido: {provider}", f"invalid provider: {provider}"))
     async with rt.db() as session:
         project = await session.get(Project, project_id)
         if project is None:
-            raise NotFound(f"projeto {project_id} não encontrado")
+            raise NotFound(
+                t(f"projeto {project_id} não encontrado", f"project {project_id} not found")
+            )
         if provider is not None:
             project.llm_provider = provider or None
         if base_url is not None:
@@ -119,16 +137,20 @@ async def set_tool_setting(
 ) -> dict[str, Any]:
     t = get_tool(tool)
     if t is None:
-        raise NotFound(f"ferramenta {tool!r} não existe")
+        raise NotFound(t(f"ferramenta {tool!r} não existe", f"tool {tool!r} does not exist"))
     if manual is not None:
         if manual not in ("ask", "act"):
-            raise Conflict("manual deve ser 'ask' ou 'act'")
+            raise Conflict(t("manual deve ser 'ask' ou 'act'", "manual must be 'ask' or 'act'"))
         if manual == "act" and t.spec.always_ask:
-            raise Conflict("esta ferramenta sempre exige aprovação")
+            raise Conflict(
+                t("esta ferramenta sempre exige aprovação", "this tool always requires approval")
+            )
     async with rt.db() as session:
         project = await session.get(Project, project_id)
         if project is None:
-            raise NotFound(f"projeto {project_id} não encontrado")
+            raise NotFound(
+                t(f"projeto {project_id} não encontrado", f"project {project_id} not found")
+            )
         settings = dict(project.tool_settings or {})
         current = dict(settings.get(tool, {}))
         if enabled is not None:
@@ -161,7 +183,9 @@ async def kill_project(rt: Runtime, project_id: str, reason: str) -> None:
     async with rt.db() as session:
         project = await session.get(Project, project_id)
         if project is None:
-            raise NotFound(f"projeto {project_id} não encontrado")
+            raise NotFound(
+                t(f"projeto {project_id} não encontrado", f"project {project_id} not found")
+            )
         project.killed_reason = reason or "acionado pelo analista"
         await session.commit()
     rt.kill_switch(await rt.get_project(project_id))
@@ -172,7 +196,9 @@ async def revive_project(rt: Runtime, project_id: str) -> None:
     async with rt.db() as session:
         project = await session.get(Project, project_id)
         if project is None:
-            raise NotFound(f"projeto {project_id} não encontrado")
+            raise NotFound(
+                t(f"projeto {project_id} não encontrado", f"project {project_id} not found")
+            )
         project.killed_reason = None
         await session.commit()
     rt.reset_kill_switch(project_id)
@@ -187,8 +213,12 @@ async def _check_llm_allowed(rt: Runtime, project: Project) -> None:
         raise Conflict(str(exc)) from exc
     if project.llm_data_policy == "local_only" and not rt.llm_config(project).is_local:
         raise Conflict(
-            "este projeto exige LLM local (llm_data_policy=local_only); "
-            "configure um modelo local, ex.: Ollama"
+            t(
+                "este projeto exige LLM local (llm_data_policy=local_only); "
+                "configure um modelo local, ex.: Ollama",
+                "this project requires a local LLM (llm_data_policy=local_only); "
+                "configure a local model, e.g. Ollama",
+            )
         )
 
 
@@ -231,7 +261,12 @@ async def create_task(
 async def send_message(rt: Runtime, task_id: str, content: str, *, wait: bool = False) -> Task:
     task, project = await rt.load_task(task_id)
     if task.status in ("running", "waiting_approval") or rt.runner.busy(task_id):
-        raise Conflict(f"tarefa está {task.status}; aguarde ou responda à aprovação pendente")
+        raise Conflict(
+            t(
+                f"tarefa está {task.status}; aguarde ou responda à aprovação pendente",
+                f"task is {task.status}; wait or answer the pending approval",
+            )
+        )
     await _check_llm_allowed(rt, project)
     await _run(
         rt,
@@ -295,9 +330,13 @@ async def resolve_approval(
     async with rt.db() as session:
         approval = await session.get(Approval, approval_id)
         if approval is None:
-            raise NotFound(f"aprovação {approval_id} não encontrada")
+            raise NotFound(
+                t(f"aprovação {approval_id} não encontrada", f"approval {approval_id} not found")
+            )
         if approval.status != "pending":
-            raise Conflict("esta aprovação já foi respondida")
+            raise Conflict(
+                t("esta aprovação já foi respondida", "this approval was already answered")
+            )
         task = await session.get(Task, approval.task_id)
         spec = get_tool(approval.tool).spec
         try:
@@ -307,7 +346,12 @@ async def resolve_approval(
         snapshot = await rt.graph.aget_state({"configurable": {"thread_id": task.id}})
         pending = [i.value.get("approval_id") for i in snapshot.interrupts]
         if not pending or pending[0] != approval_id:
-            raise Conflict("esta aprovação não é a próxima pendente da tarefa")
+            raise Conflict(
+                t(
+                    "esta aprovação não é a próxima pendente da tarefa",
+                    "this approval is not the task's next pending one",
+                )
+            )
         approval.status = "approved" if response in ("once", "session", "always") else "rejected"
         approval.response = response
         approval.note = note or None
@@ -373,9 +417,14 @@ async def import_traffic(
         fmt = fmt or detect_format(filename, text)
         exchanges = parse_traffic(text, fmt)
     except ValueError as exc:
-        raise Conflict(f"arquivo inválido: {exc}") from exc
+        raise Conflict(t(f"arquivo inválido: {exc}", f"invalid file: {exc}")) from exc
     except Exception as exc:  # XML malformado ou com entidades proibidas
-        raise Conflict(f"arquivo inválido ({type(exc).__name__}): {exc}") from exc
+        raise Conflict(
+            t(
+                f"arquivo inválido ({type(exc).__name__}): {exc}",
+                f"invalid file ({type(exc).__name__}): {exc}",
+            )
+        ) from exc
     result = await ingest_traffic(rt, project_id, exchanges, fmt)
     await rt.audit(
         project_id,
@@ -392,7 +441,7 @@ async def search_traffic(rt: Runtime, project_id: str, **filters):
 async def get_exchange(rt: Runtime, project_id: str, ref: str):
     row = await rt.traffic(await rt.get_project(project_id)).get(ref)
     if row is None:
-        raise NotFound(f"troca {ref!r} não encontrada")
+        raise NotFound(t(f"troca {ref!r} não encontrada", f"exchange {ref!r} not found"))
     return row
 
 
@@ -425,7 +474,7 @@ async def set_workspace_root(rt: Runtime, project_id: str, path: str | None) -> 
     if path:
         root = resolve_root(path)
         if not root.is_dir():
-            raise Conflict(f"diretório não encontrado: {path}")
+            raise Conflict(t(f"diretório não encontrado: {path}", f"folder not found: {path}"))
         try:
             check_not_reserved(root, [rt.settings.data_dir])
         except WorkspaceError as exc:
@@ -434,7 +483,9 @@ async def set_workspace_root(rt: Runtime, project_id: str, path: str | None) -> 
     async with rt.db() as session:
         project = await session.get(Project, project_id)
         if project is None:
-            raise NotFound(f"projeto {project_id} não encontrado")
+            raise NotFound(
+                t(f"projeto {project_id} não encontrado", f"project {project_id} not found")
+            )
         project.workspace_root = path
         await session.commit()
     await rt.audit(project_id, "project.workspace_root", path or "(removido)")
@@ -447,12 +498,14 @@ async def set_source_root(rt: Runtime, project_id: str, path: str | None) -> Pro
     if path:
         resolved = Path(path).expanduser().resolve()
         if not resolved.is_dir():
-            raise Conflict(f"diretório não encontrado: {path}")
+            raise Conflict(t(f"diretório não encontrado: {path}", f"folder not found: {path}"))
         path = str(resolved)
     async with rt.db() as session:
         project = await session.get(Project, project_id)
         if project is None:
-            raise NotFound(f"projeto {project_id} não encontrado")
+            raise NotFound(
+                t(f"projeto {project_id} não encontrado", f"project {project_id} not found")
+            )
         project.source_root = path
         await session.commit()
     await rt.audit(project_id, "project.source_root", path or "(removido)")

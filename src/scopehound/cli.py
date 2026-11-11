@@ -12,14 +12,15 @@ import typer
 from . import __version__
 from .config import Settings
 from .guardrails import Budget, Egress, GuardrailError, load_scope
+from .i18n import t
 
-app = typer.Typer(no_args_is_help=True, help="Agente de pentest com escopo imposto fora do modelo.")
-project_app = typer.Typer(no_args_is_help=True, help="Projetos (escopo, LLM, ferramentas).")
+app = typer.Typer(no_args_is_help=True, help="Pentest agent with scope enforced outside the model.")
+project_app = typer.Typer(no_args_is_help=True, help="Projects (scope, LLM, tools).")
 app.add_typer(project_app, name="project")
-session_app = typer.Typer(no_args_is_help=True, help="Sessões de autenticação (para replay_as).")
+session_app = typer.Typer(no_args_is_help=True, help="Authentication sessions (for replay_as).")
 app.add_typer(session_app, name="session")
 
-ScopeOpt = Annotated[Path, typer.Option("--scope", "-s", help="Arquivo de escopo")]
+ScopeOpt = Annotated[Path, typer.Option("--scope", "-s", help="Scope file")]
 
 
 def _fail(message: str) -> None:
@@ -29,7 +30,7 @@ def _fail(message: str) -> None:
 
 @app.command()
 def version() -> None:
-    """Mostra a versão."""
+    """Show the version."""
     typer.echo(__version__)
 
 
@@ -39,7 +40,7 @@ def check(
     scope: ScopeOpt = Path("scope.yaml"),
     method: Annotated[str, typer.Option("--method", "-X")] = "GET",
 ) -> None:
-    """Verifica, sem enviar nada, se uma requisição passaria pelos guardrails."""
+    """Check, without sending anything, whether a request would pass the guardrails."""
     settings = Settings()
     project_scope = load_scope(scope)
 
@@ -56,8 +57,14 @@ def check(
     try:
         ip = asyncio.run(run())
     except GuardrailError as exc:
-        _fail(f"BLOQUEADO: {exc}")
-    typer.secho(f"PERMITIDO: {method.upper()} {url} -> {ip} (modo {settings.mode})", fg="green")
+        _fail(t(f"BLOQUEADO: {exc}", f"BLOCKED: {exc}"))
+    typer.secho(
+        t(
+            f"PERMITIDO: {method.upper()} {url} -> {ip} (modo {settings.mode})",
+            f"ALLOWED: {method.upper()} {url} -> {ip} (mode {settings.mode})",
+        ),
+        fg="green",
+    )
 
 
 @app.command()
@@ -65,7 +72,7 @@ def serve(
     host: Annotated[str | None, typer.Option()] = None,
     port: Annotated[int | None, typer.Option()] = None,
 ) -> None:
-    """Sobe a API."""
+    """Start the API."""
     import uvicorn
 
     from .api import create_app
@@ -74,7 +81,12 @@ def serve(
     settings = Settings()
     host = host or settings.host
     if settings.mode == "local" and host not in ("127.0.0.1", "localhost", "::1"):
-        _fail("no modo local a API só escuta em 127.0.0.1 (ainda não há autenticação)")
+        _fail(
+            t(
+                "no modo local a API só escuta em 127.0.0.1 (ainda não há autenticação)",
+                "in local mode the API only listens on 127.0.0.1 (no authentication yet)",
+            )
+        )
     auth = None
     if settings.mode == "server":
         from .api.auth import AuthContext, build_oidc_verifier
@@ -104,10 +116,10 @@ def _with_runtime(fn):
 @app.command()
 def doctor(
     project: Annotated[
-        str | None, typer.Option(help="Testa o LLM do projeto; vazio usa o padrão do .env")
+        str | None, typer.Option(help="Test the project LLM; empty uses the .env default")
     ] = None,
 ) -> None:
-    """Verifica a conexão com o LLM: provedor, modelo e credencial."""
+    """Check the LLM connection: provider, model and credential."""
     from langchain_core.messages import HumanMessage
 
     from .agent import explain_llm_error
@@ -130,21 +142,28 @@ def doctor(
         cfg = rt.llm_config(proj)
         typer.echo(f"provedor : {cfg.provider}")
         typer.echo(f"base_url : {cfg.base_url}")
-        typer.echo(f"modelo   : {cfg.model or '(vazio)'}")
-        typer.echo(
-            f"local    : {'sim' if cfg.is_local else 'não'}  ·  "
-            f"chave: {'definida' if cfg.api_key else 'nenhuma'}"
-        )
+        typer.echo(f"model    : {cfg.model or '(empty)'}")
+        local_v = t("sim", "yes") if cfg.is_local else t("não", "no")
+        key_v = t("definida", "set") if cfg.api_key else t("nenhuma", "none")
+        typer.echo(f"local    : {local_v}  ·  {t('chave', 'key')}: {key_v}")
         if not cfg.model:
-            _fail("modelo não configurado: defina SCOPEHOUND_LLM_MODEL ou o LLM do projeto.")
-        typer.echo("testando uma chamada mínima…")
+            _fail(
+                t(
+                    "modelo não configurado: defina SCOPEHOUND_LLM_MODEL ou o LLM do projeto.",
+                    "model not configured: set SCOPEHOUND_LLM_MODEL or the project LLM.",
+                )
+            )
+        typer.echo(t("testando uma chamada mínima…", "testing a minimal call…"))
         try:
             model = rt.llm_factory(cfg)
             reply = await model.ainvoke([HumanMessage("responda só: ok")])
         except Exception as exc:  # noqa: BLE001
             raise explain_llm_error(exc, cfg) from exc
         text = (reply.content or "").strip() if hasattr(reply, "content") else str(reply)
-        typer.secho(f"OK — modelo respondeu: {text[:80]!r}", fg="green")
+        typer.secho(
+            t(f"OK — modelo respondeu: {text[:80]!r}", f"OK — model replied: {text[:80]!r}"),
+            fg="green",
+        )
 
     from .agent import LlmError
 
@@ -159,10 +178,10 @@ def project_create(
     name: str,
     scope: ScopeOpt = Path("scope.yaml"),
     local_only: Annotated[
-        bool, typer.Option(help="Recusar LLM que não seja local (dados sensíveis)")
+        bool, typer.Option(help="Refuse a non-local LLM (sensitive data)")
     ] = False,
 ) -> None:
-    """Cria um projeto a partir de um arquivo de escopo."""
+    """Create a project from a scope file."""
     from .core import service as svc
 
     data = load_scope(scope).model_dump(mode="json")
@@ -170,32 +189,38 @@ def project_create(
     project = _with_runtime(
         lambda rt: svc.create_project(rt, name=name, scope=data, llm_data_policy=policy)
     )
-    typer.echo(f"projeto criado: {project.name} ({project.id})")
+    typer.echo(
+        t(
+            f"projeto criado: {project.name} ({project.id})",
+            f"project created: {project.name} ({project.id})",
+        )
+    )
 
 
 @project_app.command("list")
 def project_list() -> None:
-    """Lista os projetos."""
+    """List the projects."""
     from .core import service as svc
 
     for p in _with_runtime(svc.list_projects):
+        default = t("padrão", "default")
+        key = t("própria", "own") if p.llm_api_key_enc else f"({default})"
         typer.echo(
-            f"{p.id}  {p.name}  llm={p.llm_model or '(padrão)'}  "
-            f"chave={'própria' if p.llm_api_key_enc else '(padrão)'}"
+            f"{p.id}  {p.name}  llm={p.llm_model or f'({default})'}  {t('chave', 'key')}={key}"
         )
 
 
 @project_app.command("llm")
 def project_llm(
     project: str,
-    base_url: Annotated[str | None, typer.Option(help="Ex.: http://localhost:11434/v1")] = None,
+    base_url: Annotated[str | None, typer.Option(help="e.g. http://localhost:11434/v1")] = None,
     model: Annotated[str | None, typer.Option()] = None,
     api_key: Annotated[
-        bool, typer.Option("--api-key", help="Pede a sua chave (não fica no histórico)")
+        bool, typer.Option("--api-key", help="Prompt for your key (not stored in shell history)")
     ] = False,
     clear_api_key: Annotated[bool, typer.Option()] = False,
 ) -> None:
-    """Define o LLM do projeto, inclusive com a sua própria chave."""
+    """Set the project LLM, including your own key."""
     from .core import service as svc
 
     key = typer.prompt("Chave de API", hide_input=True) if api_key else None
@@ -207,9 +232,11 @@ def project_llm(
         )
 
     p = _with_runtime(run)
+    default = t("padrão", "default")
+    key = t("própria", "own") if p.llm_api_key_enc else f"({default})"
     typer.echo(
-        f"LLM de {p.name}: {p.llm_base_url or '(padrão)'} {p.llm_model or '(padrão)'} "
-        f"chave={'própria' if p.llm_api_key_enc else '(padrão)'}"
+        f"{t('LLM de', 'LLM of')} {p.name}: {p.llm_base_url or f'({default})'} "
+        f"{p.llm_model or f'({default})'} {t('chave', 'key')}={key}"
     )
 
 
@@ -220,7 +247,7 @@ def project_tool(
     enable: Annotated[bool | None, typer.Option("--enable/--disable")] = None,
     manual: Annotated[str | None, typer.Option(help="ask | act")] = None,
 ) -> None:
-    """Liga/desliga uma ferramenta ou define Ask/Act (modo manual)."""
+    """Enable/disable a tool or set Ask/Act (manual mode)."""
     from .core import service as svc
 
     async def run(rt):
@@ -234,11 +261,9 @@ def project_tool(
 def import_cmd(
     project: str,
     file: Path,
-    fmt: Annotated[
-        str | None, typer.Option("--format", help="har | burp (detecta sozinho)")
-    ] = None,
+    fmt: Annotated[str | None, typer.Option("--format", help="har | burp (auto-detected)")] = None,
 ) -> None:
-    """Importa tráfego de um HAR ou do XML exportado do Burp ("Save items")."""
+    """Import traffic from a HAR or the Burp XML export ("Save items")."""
     from .core import service as svc
 
     text = file.read_text(encoding="utf-8", errors="replace")
@@ -253,7 +278,7 @@ def import_cmd(
 
 @app.command()
 def sitemap(project: str, host: Annotated[str | None, typer.Option()] = None) -> None:
-    """Mostra o site map do projeto."""
+    """Show the project site map."""
     from .core import service as svc
     from .traffic import render_sitemap
 
@@ -270,7 +295,7 @@ def traffic(
     text: Annotated[str, typer.Option("--text", "-t")] = "",
     limit: Annotated[int, typer.Option()] = 30,
 ) -> None:
-    """Lista o histórico de tráfego (mais recentes primeiro)."""
+    """List the traffic history (most recent first)."""
     from .core import service as svc
     from .traffic import summarize
 
@@ -285,12 +310,12 @@ def traffic(
 @app.command()
 def proxy(
     project: str,
-    port: Annotated[int, typer.Option(help="Porta do proxy")] = 8081,
-    api: Annotated[str | None, typer.Option(help="URL da API do scopehound")] = None,
+    port: Annotated[int, typer.Option(help="Proxy port")] = 8081,
+    api: Annotated[str | None, typer.Option(help="scopehound API URL")] = None,
 ) -> None:
-    """Proxy de captura: navegue pelo app e o tráfego no escopo vai para o projeto.
+    """Capture proxy: browse the app and in-scope traffic goes to the project.
 
-    Requer `scopehound serve` rodando e o extra de proxy (`uv sync --extra proxy`).
+    Requires `scopehound serve` running and the proxy extra (`uv sync --extra proxy`).
     """
     try:
         import mitmproxy  # noqa: F401
@@ -305,13 +330,27 @@ def proxy(
     try:
         projects = httpx.get(f"{api_url}/projects", timeout=5, trust_env=False).json()
     except httpx.HTTPError:
-        _fail(f"API indisponível em {api_url}: rode `scopehound serve` antes")
+        _fail(
+            t(
+                f"API indisponível em {api_url}: rode `scopehound serve` antes",
+                f"API unavailable at {api_url}: run `scopehound serve` first",
+            )
+        )
     match = [p for p in projects if project in (p["id"], p["name"])]
     if not match:
-        _fail(f"projeto {project!r} não encontrado na API")
+        _fail(
+            t(
+                f"projeto {project!r} não encontrado na API",
+                f"project {project!r} not found in the API",
+            )
+        )
     typer.secho(
-        f"proxy em 127.0.0.1:{port} → projeto {match[0]['name']}\n"
-        f"configure o navegador para usar este proxy e instale o certificado em http://mitm.it",
+        t(
+            f"proxy em 127.0.0.1:{port} → projeto {match[0]['name']}\n"
+            "configure o navegador para usar este proxy e instale o certificado em http://mitm.it",
+            f"proxy on 127.0.0.1:{port} → project {match[0]['name']}\n"
+            "set your browser to use this proxy and install the certificate at http://mitm.it",
+        ),
         fg="green",
     )
     asyncio.run(run_proxy(api_url, match[0]["id"], port))
@@ -319,7 +358,7 @@ def proxy(
 
 @app.command()
 def skills() -> None:
-    """Lista as skills disponíveis."""
+    """List the available skills."""
     from .core import service as svc
 
     for s in _with_runtime(svc.list_skills):
@@ -331,17 +370,22 @@ def session_add(
     project: str,
     name: str,
     header: Annotated[
-        list[str], typer.Option("--header", "-H", help="Ex.: -H 'Cookie: token=...'")
+        list[str], typer.Option("--header", "-H", help="e.g. -H 'Cookie: token=...'")
     ],
     description: Annotated[str, typer.Option()] = "",
 ) -> None:
-    """Cadastra uma sessão (cookies/headers de uma identidade) para o replay_as."""
+    """Register a session (cookies/headers of an identity) for replay_as."""
     from .core import service as svc
 
     secret: dict[str, str] = {}
     for item in header:
         if ":" not in item:
-            _fail(f"header inválido (use 'Nome: valor'): {item}")
+            _fail(
+                t(
+                    f"header inválido (use 'Nome: valor'): {item}",
+                    f"invalid header (use 'Name: value'): {item}",
+                )
+            )
         k, v = item.split(":", 1)
         secret[k.strip()] = v.strip()
 
@@ -350,12 +394,17 @@ def session_add(
         await svc.set_session(rt, p.id, name, secret, description)
 
     _with_runtime(run)
-    typer.echo(f"sessão '{name}' salva ({', '.join(secret)})")
+    typer.echo(
+        t(
+            f"sessão '{name}' salva ({', '.join(secret)})",
+            f"session '{name}' saved ({', '.join(secret)})",
+        )
+    )
 
 
 @session_app.command("list")
 def session_list(project: str) -> None:
-    """Lista as sessões do projeto (sem mostrar os valores)."""
+    """List the project sessions (without showing the values)."""
     from .core import service as svc
 
     async def run(rt):
@@ -369,9 +418,9 @@ def session_list(project: str) -> None:
 @project_app.command("source")
 def project_source(
     project: str,
-    path: Annotated[str | None, typer.Argument(help="Raiz do código do alvo; vazio remove")] = None,
+    path: Annotated[str | None, typer.Argument(help="Target source root; empty removes it")] = None,
 ) -> None:
-    """Define a raiz de código para a ferramenta read_source (só leitura)."""
+    """Set the source root for the read_source tool (read-only)."""
     from .core import service as svc
 
     async def run(rt):
@@ -379,17 +428,22 @@ def project_source(
         return await svc.set_source_root(rt, p.id, path)
 
     p = _with_runtime(run)
-    typer.echo(f"source_root de {p.name}: {p.source_root or '(nenhum)'}")
+    typer.echo(
+        t(
+            f"source_root de {p.name}: {p.source_root or '(nenhum)'}",
+            f"source_root of {p.name}: {p.source_root or '(none)'}",
+        )
+    )
 
 
 @project_app.command("workspace")
 def project_workspace(
     project: str,
     path: Annotated[
-        str | None, typer.Argument(help="Pasta read-write p/ ler/escrever arquivos; vazio remove")
+        str | None, typer.Argument(help="Read-write folder to read/write files; empty removes it")
     ] = None,
 ) -> None:
-    """Define o workspace: pasta onde o agente pode ler e escrever arquivos."""
+    """Set the workspace: a folder where the agent can read and write files."""
     from .core import service as svc
 
     async def run(rt):
@@ -397,22 +451,25 @@ def project_workspace(
         return await svc.set_workspace_root(rt, p.id, path)
 
     p = _with_runtime(run)
-    typer.echo(f"workspace de {p.name}: {p.workspace_root or '(nenhum)'}")
+    typer.echo(
+        t(
+            f"workspace de {p.name}: {p.workspace_root or '(nenhum)'}",
+            f"workspace of {p.name}: {p.workspace_root or '(none)'}",
+        )
+    )
 
 
 @app.command()
 def run(
     project: str,
-    goal: Annotated[str, typer.Option("--goal", "-g", help="Objetivo a perseguir")],
+    goal: Annotated[str, typer.Option("--goal", "-g", help="Goal to pursue")],
     fail_on: Annotated[
-        str, typer.Option("--fail-on", help="Severidade mínima que falha o CI (ex.: high)")
+        str, typer.Option("--fail-on", help="Minimum severity that fails CI (e.g. high)")
     ] = "",
-    sarif: Annotated[
-        Path | None, typer.Option("--sarif", help="Escreve SARIF neste arquivo")
-    ] = None,
+    sarif: Annotated[Path | None, typer.Option("--sarif", help="Write SARIF to this file")] = None,
     mode: Annotated[str, typer.Option()] = "autonomous",
 ) -> None:
-    """Execução não interativa (CI): persegue um objetivo e reporta os achados."""
+    """Non-interactive run (CI): pursue a goal and report the findings."""
     import sys
 
     from .core import service as svc
@@ -426,18 +483,29 @@ def run(
 
     task, leads = _with_runtime(go)
     confirmed = [lead for lead in leads if lead.status == "confirmed"]
-    typer.echo(f"tarefa {task.status}: {len(leads)} lead(s), {len(confirmed)} confirmado(s)")
+    typer.echo(
+        t(
+            f"tarefa {task.status}: {len(leads)} lead(s), {len(confirmed)} confirmado(s)",
+            f"task {task.status}: {len(leads)} lead(s), {len(confirmed)} confirmed",
+        )
+    )
     for lead in leads:
         typer.echo(f"  [{lead.severity}] {lead.title} ({lead.status}) {lead.url}")
     if sarif:
         sarif.write_text(sarif_json(leads), encoding="utf-8")
-        typer.echo(f"SARIF escrito em {sarif}")
+        typer.echo(t(f"SARIF escrito em {sarif}", f"SARIF written to {sarif}"))
     if task.status == "failed":
-        _fail(f"execução falhou: {task.error}")
+        _fail(t(f"execução falhou: {task.error}", f"run failed: {task.error}"))
     if fail_on:
         worst = max_severity(leads)
         if worst and severity_at_least(worst, fail_on):
-            typer.secho(f"CI: achado {worst} >= {fail_on.upper()}", fg="red")
+            typer.secho(
+                t(
+                    f"CI: achado {worst} >= {fail_on.upper()}",
+                    f"CI: finding {worst} >= {fail_on.upper()}",
+                ),
+                fg="red",
+            )
             sys.exit(2)
     typer.secho("CI: ok", fg="green")
 
@@ -445,10 +513,10 @@ def run(
 @app.command()
 def chat(
     project: str,
-    task: Annotated[str | None, typer.Option(help="Continuar uma tarefa existente")] = None,
+    task: Annotated[str | None, typer.Option(help="Continue an existing task")] = None,
     mode: Annotated[str, typer.Option(help="manual | smart | autonomous")] = "smart",
 ) -> None:
-    """Conversa com o agente pelo terminal, com aprovações interativas."""
+    """Chat with the agent in the terminal, with interactive approvals."""
     from .chat import run_chat
 
     _with_runtime(lambda rt: run_chat(rt, project, task, mode))

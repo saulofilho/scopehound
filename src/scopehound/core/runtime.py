@@ -17,6 +17,7 @@ from ..agent.graph import build_graph
 from ..agent.llm import LlmConfig, build_chat_model
 from ..config import Settings
 from ..guardrails import AuditEvent, Budget, Egress, KillSwitch, RateLimiter, Resolver, Scope
+from ..i18n import set_language
 from ..oob import OobRegistry
 from ..policy import Decision
 from ..redact import Redactor
@@ -73,6 +74,7 @@ class Runtime:
 
     async def start(self) -> None:
         s = self.settings
+        set_language(s.language)
         s.data_dir.mkdir(parents=True, exist_ok=True)
         url = s.resolved_database_url()
         await asyncio.to_thread(run_migrations, url)

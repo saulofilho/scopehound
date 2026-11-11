@@ -6,18 +6,20 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
+from ..i18n import t
+
 if TYPE_CHECKING:
     from .registry import ToolContext
 
 
 class UseSkillArgs(BaseModel):
-    name: str = Field(description="Nome de uma skill do catálogo")
+    name: str = Field(description="Name of a skill from the catalog")
 
 
 class SpawnSubagentArgs(BaseModel):
-    title: str = Field(description="Título curto da subtarefa")
-    prompt: str = Field(description="Objetivo da subtarefa, autossuficiente")
-    skill: str = Field(default="", description="Skill a usar na subtarefa (opcional)")
+    title: str = Field(description="Short title of the subtask")
+    prompt: str = Field(description="Self-contained goal of the subtask")
+    skill: str = Field(default="", description="Skill to use in the subtask (optional)")
     max_steps: int = Field(default=10, ge=1, le=50)
     max_requests: int = Field(default=40, ge=1, le=500)
 
@@ -26,14 +28,23 @@ async def use_skill(ctx: ToolContext, a: UseSkillArgs) -> str:
     skill = ctx.library.get(a.name)
     if skill is None:
         names = ", ".join(s["name"] for s in ctx.library.catalog())
-        return f"Skill {a.name!r} não existe. Disponíveis: {names}"
+        return t(
+            f"Skill {a.name!r} não existe. Disponíveis: {names}",
+            f"Skill {a.name!r} does not exist. Available: {names}",
+        )
     tools = ", ".join(sorted(skill.available_tools()))
-    return f"Skill ativa: {skill.name}. Ferramentas disponíveis agora: {tools}.\n\n{skill.body}"
+    header = t(
+        f"Skill ativa: {skill.name}. Ferramentas disponíveis agora: {tools}.",
+        f"Active skill: {skill.name}. Tools available now: {tools}.",
+    )
+    return f"{header}\n\n{skill.body}"
 
 
 async def spawn_subagent(ctx: ToolContext, a: SpawnSubagentArgs) -> str:
     if ctx.spawn is None:
-        return "subagentes não disponíveis neste contexto."
+        return t(
+            "subagentes não disponíveis neste contexto.", "subagents unavailable in this context."
+        )
     return await ctx.spawn(
         title=a.title,
         prompt=a.prompt,

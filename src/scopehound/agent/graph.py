@@ -22,6 +22,7 @@ from langchain_core.messages import (
 from langgraph.graph import END, START, StateGraph, add_messages
 from langgraph.types import interrupt
 
+from ..i18n import t
 from ..policy import decide, grant_key
 from ..tools import get_tool, openai_tool_schemas, run_tool
 from .llm import explain_llm_error
@@ -54,14 +55,29 @@ def build_graph(rt: Runtime) -> StateGraph:
         task_id = task_id_of(config)
         task, project = await rt.load_task(task_id)
         if rt.kill_switch(project).tripped:
-            return _stop(f"Parado: kill switch acionado ({rt.kill_switch(project).reason}).")
+            return _stop(
+                t(
+                    f"Parado: kill switch acionado ({rt.kill_switch(project).reason}).",
+                    f"Stopped: kill switch tripped ({rt.kill_switch(project).reason}).",
+                )
+            )
         s = rt.settings
         step_cap, _req_cap = rt.task_caps.get(task_id, (s.task_max_steps, s.task_max_requests))
         step_cap = min(step_cap, s.task_max_steps)
         if task.steps_used >= step_cap:
-            return _stop(f"Parado: orçamento de passos esgotado ({step_cap}).")
+            return _stop(
+                t(
+                    f"Parado: orçamento de passos esgotado ({step_cap}).",
+                    f"Stopped: step budget exhausted ({step_cap}).",
+                )
+            )
         if task.tokens_used >= s.task_max_tokens:
-            return _stop(f"Parado: orçamento de tokens esgotado ({s.task_max_tokens}).")
+            return _stop(
+                t(
+                    f"Parado: orçamento de tokens esgotado ({s.task_max_tokens}).",
+                    f"Stopped: token budget exhausted ({s.task_max_tokens}).",
+                )
+            )
 
         settings = project.tool_settings or {}
         active_skill = state.get("active_skill")
@@ -105,14 +121,20 @@ def build_graph(rt: Runtime) -> StateGraph:
                 decisions[call["id"]] = {
                     "allowed": False,
                     "outcome": "denied",
-                    "note": f"ferramenta desconhecida: {call['name']}",
+                    "note": t(
+                        f"ferramenta desconhecida: {call['name']}",
+                        f"unknown tool: {call['name']}",
+                    ),
                 }
                 continue
             if skill is not None and call["name"] not in skill.available_tools():
                 decisions[call["id"]] = {
                     "allowed": False,
                     "outcome": "denied",
-                    "note": f"ferramenta fora da skill ativa '{active_skill}'",
+                    "note": t(
+                        f"ferramenta fora da skill ativa '{active_skill}'",
+                        f"tool outside the active skill '{active_skill}'",
+                    ),
                 }
                 continue
             decision = decide(
@@ -133,7 +155,7 @@ def build_graph(rt: Runtime) -> StateGraph:
                 decisions[call["id"]] = {
                     "allowed": False,
                     "outcome": "denied",
-                    "note": f"NEGADO: {decision.reason}",
+                    "note": t(f"NEGADO: {decision.reason}", f"DENIED: {decision.reason}"),
                 }
                 continue
 
@@ -155,9 +177,9 @@ def build_graph(rt: Runtime) -> StateGraph:
                     await rt.set_tool_manual(project.id, tool.spec.name, "act")
                 decisions[call["id"]] = {"allowed": True, "outcome": "approved", "note": response}
             else:
-                text = "REJEITADO pelo analista."
+                text = t("REJEITADO pelo analista.", "REJECTED by the analyst.")
                 if response == "redirect" and note:
-                    text += f" Instrução do analista: {note}"
+                    text += t(f" Instrução do analista: {note}", f" Analyst instruction: {note}")
                 decisions[call["id"]] = {"allowed": False, "outcome": "rejected", "note": text}
         return {"decisions": decisions, "session_grants": grants}
 
@@ -171,7 +193,11 @@ def build_graph(rt: Runtime) -> StateGraph:
         for call in last.tool_calls:
             decision = decisions.get(
                 call["id"],
-                {"allowed": False, "outcome": "denied", "note": "sem decisão de política"},
+                {
+                    "allowed": False,
+                    "outcome": "denied",
+                    "note": t("sem decisão de política", "no policy decision"),
+                },
             )
             if not decision["allowed"]:
                 text, outcome = decision["note"], decision["outcome"]
@@ -199,9 +225,14 @@ def build_graph(rt: Runtime) -> StateGraph:
             return {
                 "messages": [
                     HumanMessage(
-                        f"Objetivo ainda em aberto: {goal}\n"
-                        "Continue perseguindo-o com as ferramentas, ou chame finish "
-                        "se já o cumpriu ou se não há mais o que fazer."
+                        t(
+                            f"Objetivo ainda em aberto: {goal}\n"
+                            "Continue perseguindo-o com as ferramentas, ou chame finish "
+                            "se já o cumpriu ou se não há mais o que fazer.",
+                            f"Goal still open: {goal}\n"
+                            "Keep pursuing it with the tools, or call finish if you have "
+                            "met it or there is nothing left to do.",
+                        )
                     )
                 ],
                 "goal_nudges": nudges + 1,

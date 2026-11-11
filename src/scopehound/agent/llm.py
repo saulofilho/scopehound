@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from langchain_core.language_models import BaseChatModel
 
 from ..config import is_local_llm
+from ..i18n import t
 
 
 class LlmError(RuntimeError):
@@ -31,49 +32,81 @@ class LlmConfig:
 
     @property
     def where(self) -> str:
-        return f"modelo '{self.model or '(vazio)'}' em {self.base_url}"
+        empty = t("(vazio)", "(empty)")
+        return t(
+            f"modelo '{self.model or empty}' em {self.base_url}",
+            f"model '{self.model or empty}' at {self.base_url}",
+        )
 
 
 def explain_llm_error(exc: Exception, cfg: LlmConfig) -> LlmError:
-    """Traduz erros do provedor em uma mensagem com o provável ajuste.
+    """Translate provider errors into a message with the likely fix.
 
-    O stack trace do openai/langchain não diz qual modelo ou URL falhou, nem o
-    que fazer. Aqui a mensagem nomeia os dois e sugere a correção."""
+    The openai/langchain stack trace does not say which model or URL failed, nor
+    what to do. This names both and suggests the correction."""
     status = getattr(exc, "status_code", None) or getattr(
         getattr(exc, "response", None), "status_code", None
     )
     name = type(exc).__name__
     ollama = cfg.is_local and "11434" in cfg.base_url
-    base = f"Falha no LLM ({cfg.where})."
+    base = t(f"Falha no LLM ({cfg.where}).", f"LLM failure ({cfg.where}).")
 
     if status == 404 or "NotFound" in name:
-        hint = (
+        hint = t(
             f"O provedor não conhece o modelo '{cfg.model}'. "
-            "Confira o nome exato — ele precisa bater com o que o provedor expõe."
+            "Confira o nome exato — ele precisa bater com o que o provedor expõe.",
+            f"The provider does not know the model '{cfg.model}'. "
+            "Check the exact name — it must match what the provider exposes.",
         )
         if ollama:
-            hint += (
+            hint += t(
                 " No Ollama: rode `ollama list` e use o nome com a tag "
-                "(ex.: 'qwen3:8b', não 'qwen3'); baixe com `ollama pull <modelo>`."
+                "(ex.: 'qwen3:8b', não 'qwen3'); baixe com `ollama pull <modelo>`.",
+                " On Ollama: run `ollama list` and use the name with its tag "
+                "(e.g. 'qwen3:8b', not 'qwen3'); pull it with `ollama pull <model>`.",
             )
         else:
-            hint += (
+            hint += t(
                 " Confira também se SCOPEHOUND_LLM_BASE_URL aponta para o caminho "
-                "compatível com OpenAI (geralmente terminando em /v1)."
+                "compatível com OpenAI (geralmente terminando em /v1).",
+                " Also check that SCOPEHOUND_LLM_BASE_URL points to the "
+                "OpenAI-compatible path (usually ending in /v1).",
             )
         return LlmError(f"{base} {hint}")
     if status in (401, 403) or "Authentication" in name or "PermissionDenied" in name:
         return LlmError(
-            f"{base} Credencial recusada ({status}). Verifique SCOPEHOUND_LLM_API_KEY "
-            "ou a chave do projeto (`scopehound project llm <projeto> --api-key`)."
+            base
+            + t(
+                f" Credencial recusada ({status}). Verifique SCOPEHOUND_LLM_API_KEY "
+                "ou a chave do projeto (`scopehound project llm <projeto> --api-key`).",
+                f" Credential refused ({status}). Check SCOPEHOUND_LLM_API_KEY "
+                "or the project key (`scopehound project llm <project> --api-key`).",
+            )
         )
     if status == 429 or "RateLimit" in name:
-        return LlmError(f"{base} Limite do provedor atingido (429). Aguarde ou troque de modelo.")
+        return LlmError(
+            base
+            + t(
+                " Limite do provedor atingido (429). Aguarde ou troque de modelo.",
+                " Provider rate limit hit (429). Wait or switch model.",
+            )
+        )
     if "Connection" in name or "Timeout" in name or "APIConnection" in name:
         service = (
-            "o servidor do Ollama está rodando (`ollama serve`)" if ollama else "a URL e a rede"
+            t(
+                "o servidor do Ollama está rodando (`ollama serve`)",
+                "the Ollama server is running (`ollama serve`)",
+            )
+            if ollama
+            else t("a URL e a rede", "the URL and the network")
         )
-        return LlmError(f"{base} Não foi possível conectar. Confira se {service}.")
+        return LlmError(
+            base
+            + t(
+                f" Não foi possível conectar. Confira se {service}.",
+                f" Could not connect. Check that {service}.",
+            )
+        )
     return LlmError(f"{base} {name}: {exc}")
 
 

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SCOPEHOUND_", env_file=".env", extra="ignore")
 
     mode: Literal["local", "server"] = "local"
+    language: Literal["pt", "en"] = "pt"
     data_dir: Path = Path(".scopehound")
     database_url: str | None = None
     host: str = "127.0.0.1"

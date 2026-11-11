@@ -26,6 +26,7 @@ from typing import Literal
 
 import httpx
 
+from ..i18n import t
 from .budget import Budget
 from .errors import EgressDenied, EgressNetworkError, GuardrailError, ScopeViolation
 from .ippolicy import IpPolicy
@@ -147,7 +148,12 @@ class Egress:
                 # Trocar o Host num IP permitido pode fazer um proxy reverso
                 # encaminhar para um destino fora do escopo.
                 if value.strip().lower() != target.host_header.lower():
-                    raise ScopeViolation(f"cabeçalho Host '{value}' difere do alvo")
+                    raise ScopeViolation(
+                        t(
+                            f"cabeçalho Host '{value}' difere do alvo",
+                            f"Host header '{value}' differs from the target",
+                        )
+                    )
                 continue
             prepared[name] = value
         prepared["Host"] = target.host_header
@@ -160,9 +166,19 @@ class Egress:
             try:
                 ips = await self.resolver(target.host, target.port)
             except OSError as exc:
-                raise EgressDenied(f"falha ao resolver {target.host}: {exc}") from exc
+                raise EgressDenied(
+                    t(
+                        f"falha ao resolver {target.host}: {exc}",
+                        f"failed to resolve {target.host}: {exc}",
+                    )
+                ) from exc
         if not ips:
-            raise EgressDenied(f"{target.host} não resolveu para nenhum IP")
+            raise EgressDenied(
+                t(
+                    f"{target.host} não resolveu para nenhum IP",
+                    f"{target.host} did not resolve to any IP",
+                )
+            )
         # Todos os IPs precisam passar: se só um passasse, a escolha do IP na
         # conexão decidiria se o bloqueio vale.
         for ip in ips:

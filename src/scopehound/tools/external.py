@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field
 
 from ..guardrails import ScopeViolation, ToolArgsDenied, check_url, sanitize_sqlmap_args
+from ..i18n import t
 
 if TYPE_CHECKING:
     from .registry import ToolContext
@@ -25,18 +26,18 @@ OUTPUT_CAP = 4000
 
 class NucleiArgs(BaseModel):
     url: str
-    tags: str = Field(default="", description="tags/templates do nuclei, ex.: 'cve,exposure'")
+    tags: str = Field(default="", description="nuclei tags/templates, e.g. 'cve,exposure'")
 
 
 class FfufArgs(BaseModel):
-    url: str = Field(description="URL com o marcador FUZZ (ou anexado ao final)")
-    wordlist: str = Field(description="Caminho da wordlist no host")
+    url: str = Field(description="URL with the FUZZ marker (or appended at the end)")
+    wordlist: str = Field(description="Wordlist path on the host")
 
 
 class SqlmapArgs(BaseModel):
     url: str
-    data: str = Field(default="", description="corpo POST (opcional)")
-    extra_args: str = Field(default="", description="flags extras (passam pela allowlist)")
+    data: str = Field(default="", description="POST body (optional)")
+    extra_args: str = Field(default="", description="extra flags (pass through the allowlist)")
 
 
 async def _run(cmd: list[str], timeout: float = TIMEOUT) -> tuple[int, str, str]:
@@ -56,13 +57,14 @@ def _gate(ctx: ToolContext, url: str) -> str | None:
     """Portões comuns: habilitação, escopo, dry-run. Retorna erro ou None."""
     if not ctx.external_enabled:
         return (
-            "DESABILITADO: defina SCOPEHOUND_ENABLE_EXTERNAL_TOOLS=true "
-            "para habilitar nuclei/ffuf/sqlmap."
+            t("DESABILITADO: defina ", "DISABLED: set ")
+            + "SCOPEHOUND_ENABLE_EXTERNAL_TOOLS=true "
+            + t("para habilitar nuclei/ffuf/sqlmap.", "to enable nuclei/ffuf/sqlmap.")
         )
     try:
         check_url(ctx.scope, url)
     except ScopeViolation as exc:
-        return f"BLOQUEADO (escopo): {exc}"
+        return t(f"BLOQUEADO (escopo): {exc}", f"BLOCKED (scope): {exc}")
     return None
 
 
@@ -102,7 +104,7 @@ async def sqlmap(ctx: ToolContext, a: SqlmapArgs) -> str:
             else sanitize_sqlmap_args([])
         )
     except ToolArgsDenied as exc:
-        return f"BLOQUEADO (argumento): {exc}"
+        return t(f"BLOQUEADO (argumento): {exc}", f"BLOCKED (argument): {exc}")
     cmd = [ctx.bins["sqlmap"], "-u", a.url, *extra]
     if a.data:
         cmd += ["--data", a.data]

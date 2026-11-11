@@ -55,7 +55,7 @@ async def test_replay_as_uses_session(harness):
         tool_call("send_request", GET2, "c1"),
         lambda msgs: tool_call(
             "replay_as",
-            {"id": msgs[-1].content.split("[troca ")[1][:12], "session": "userB"},
+            {"id": msgs[-1].content.split("[exchange ")[1][:12], "session": "userB"},
             "c2",
         ),
         AIMessage("comparado"),
@@ -76,7 +76,7 @@ async def test_replay_as_missing_session(harness):
         tool_call("send_request", GET2, "c1"),
         lambda msgs: tool_call(
             "replay_as",
-            {"id": msgs[-1].content.split("[troca ")[1][:12], "session": "fantasma"},
+            {"id": msgs[-1].content.split("[exchange ")[1][:12], "session": "fantasma"},
             "c2",
         ),
         AIMessage("fim"),
