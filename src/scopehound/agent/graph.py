@@ -24,6 +24,7 @@ from langgraph.types import interrupt
 
 from ..policy import decide, grant_key
 from ..tools import get_tool, openai_tool_schemas, run_tool
+from .llm import explain_llm_error
 from .prompts import system_prompt
 
 if TYPE_CHECKING:
@@ -82,7 +83,10 @@ def build_graph(rt: Runtime) -> StateGraph:
             goal=state.get("goal"),
         )
         messages = [SystemMessage(prompt), *state["messages"]]
-        response = await model.ainvoke(messages)
+        try:
+            response = await model.ainvoke(messages)
+        except Exception as exc:  # noqa: BLE001 - traduzido para mensagem acionável
+            raise explain_llm_error(exc, rt.llm_config(project)) from exc
         tokens = (response.usage_metadata or {}).get("total_tokens", 0)
         await rt.add_usage(task_id, steps=1, tokens=tokens)
         return {"messages": [response], "decisions": {}, "finished": False}

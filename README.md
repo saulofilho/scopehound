@@ -419,6 +419,7 @@ Nenhuma destas regras depende do modelo, e nenhum prompt as altera.
 | `scopehound traffic PROJETO [-t TEXTO] [--limit N]` | Lista o histórico |
 | `scopehound serve [--host] [--port]` | Sobe a API (no modo local, só em 127.0.0.1) |
 | `scopehound run PROJETO --goal G [--fail-on SEV] [--sarif ARQ]` | Execução de CI (SARIF, exit code) |
+| `scopehound doctor [--project P]` | Testa a conexão com o LLM (provedor, modelo, credencial) |
 | `scopehound version` | Mostra a versão |
 
 ## Referência da API

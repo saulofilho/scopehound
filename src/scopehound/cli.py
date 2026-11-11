@@ -101,6 +101,59 @@ def _with_runtime(fn):
         _fail(str(exc))
 
 
+@app.command()
+def doctor(
+    project: Annotated[
+        str | None, typer.Option(help="Testa o LLM do projeto; vazio usa o padrão do .env")
+    ] = None,
+) -> None:
+    """Verifica a conexão com o LLM: provedor, modelo e credencial."""
+    from langchain_core.messages import HumanMessage
+
+    from .agent import explain_llm_error
+    from .core import service as svc
+
+    async def run(rt):
+        if project:
+            proj = await svc.find_project(rt, project)
+        else:
+            proj = type(
+                "P",
+                (),
+                {
+                    "llm_provider": None,
+                    "llm_base_url": None,
+                    "llm_model": None,
+                    "llm_api_key_enc": None,
+                },
+            )()
+        cfg = rt.llm_config(proj)
+        typer.echo(f"provedor : {cfg.provider}")
+        typer.echo(f"base_url : {cfg.base_url}")
+        typer.echo(f"modelo   : {cfg.model or '(vazio)'}")
+        typer.echo(
+            f"local    : {'sim' if cfg.is_local else 'não'}  ·  "
+            f"chave: {'definida' if cfg.api_key else 'nenhuma'}"
+        )
+        if not cfg.model:
+            _fail("modelo não configurado: defina SCOPEHOUND_LLM_MODEL ou o LLM do projeto.")
+        typer.echo("testando uma chamada mínima…")
+        try:
+            model = rt.llm_factory(cfg)
+            reply = await model.ainvoke([HumanMessage("responda só: ok")])
+        except Exception as exc:  # noqa: BLE001
+            raise explain_llm_error(exc, cfg) from exc
+        text = (reply.content or "").strip() if hasattr(reply, "content") else str(reply)
+        typer.secho(f"OK — modelo respondeu: {text[:80]!r}", fg="green")
+
+    from .agent import LlmError
+
+    try:
+        _with_runtime(run)
+    except LlmError as exc:
+        _fail(str(exc))
+
+
 @project_app.command("create")
 def project_create(
     name: str,
