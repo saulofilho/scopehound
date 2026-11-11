@@ -9,202 +9,275 @@
 <meta property="og:type" content="website" />
 <meta property="og:title" content="scopehound — o farejador que nunca sai do escopo" />
 <meta property="og:description" content="Agente de IA para pentest assistido por humano. O escopo e as permissões vivem fora do modelo." />
-<meta property="og:image" content="og.png" />
+<meta property="og:image" content="https://saulofilho.github.io/scopehound/og.png" />
 <meta property="og:url" content="https://saulofilho.github.io/scopehound/" />
 <meta name="twitter:card" content="summary_large_image" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Pixelify+Sans:wght@400;500;600;700&family=Silkscreen&family=VT323&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 <a class="skip" href="#conteudo">Pular para o conteúdo</a>
 
-<header class="nav" id="topo">
+<header class="menubar" id="topo">
   <a class="brand" href="#topo" aria-label="scopehound, início">
-    <svg class="brand-mark" width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
-      <circle cx="13" cy="13" r="11" fill="none" stroke="var(--faro)" stroke-width="1.4" stroke-dasharray="1.5 5" />
-      <circle cx="13" cy="13" r="3.4" fill="var(--faro)" />
-    </svg>
+    <i class="px" data-px="hound" aria-hidden="true"></i>
     <span>scopehound</span>
   </a>
-  <nav class="nav-links" aria-label="Seções">
-    <a href="#como">Como funciona</a>
-    <a href="#recursos">Recursos</a>
-    <a href="#burp">Burp AT</a>
-    <a href="#comecar">Começar</a>
-    <a class="ghost" href="https://github.com/saulofilho/scopehound">GitHub ↗</a>
+  <nav aria-label="Seções">
+    <a href="#metodo"><u>M</u>étodo</a>
+    <a href="#recursos"><u>R</u>ecursos</a>
+    <a href="#pista"><u>P</u>ista</a>
+    <a href="#burp"><u>B</u>urp AT</a>
+    <a href="#comecar"><u>C</u>omeçar</a>
   </nav>
+  <a class="btn95 small" href="https://github.com/saulofilho/scopehound">GitHub</a>
 </header>
 
 <main id="conteudo">
 
   <section class="hero">
-    <div class="hero-text">
-      <p class="eyebrow"><span class="dot"></span> Pentest assistido por humano · open source</p>
-      <h1>O farejador que <br>nunca sai do escopo.</h1>
-      <p class="lede">Um agente de IA que segue o faro, forma hipóteses e chama ferramentas — mas o escopo e as permissões vivem <em>fora do modelo</em>. Nenhum prompt os burla. Inspirado na lógica do <a href="https://portswigger.net/burp/burp-at">Burp AT</a>.</p>
+    <div class="stars" aria-hidden="true"></div>
+    <div class="hero-copy">
+      <p class="kicker">Pentest assistido por humano · open source</p>
+      <h1>O farejador que nunca sai do escopo.</h1>
+      <p class="lede">Um agente de IA que segue o faro, forma hipóteses e chama ferramentas — mas o escopo e as permissões vivem <mark>fora do modelo</mark>. Nenhum prompt os burla. Inspirado na lógica do <a href="https://portswigger.net/burp/burp-at">Burp AT</a>.</p>
       <div class="cta">
-        <a class="btn primary" href="#comecar">Começar o caso</a>
-        <code class="install" data-copy="git clone https://github.com/saulofilho/scopehound"><span>git clone github.com/saulofilho/scopehound</span><i class="copy" aria-hidden="true">copiar</i></code>
+        <a class="btn95" href="#comecar">Começar o caso</a>
+        <a class="btn95 ghost" href="https://github.com/saulofilho/scopehound">Ver no GitHub</a>
       </div>
-      <ul class="trust">
-        <li>Escopo imposto por código</li>
-        <li>Achados são pistas até verificar</li>
-        <li>Local ou servidor</li>
-      </ul>
+      <code class="prompt" data-copy="git clone https://github.com/saulofilho/scopehound" tabindex="0" role="button" aria-label="Copiar comando git clone">C:\&gt; git clone github.com/saulofilho/scopehound<span class="caret"></span></code>
     </div>
-    <div class="hero-art" aria-hidden="true">
-      <svg viewBox="0 0 360 300" class="trail" role="img">
-        <rect class="fence" x="214" y="40" width="130" height="220" rx="12" />
-        <text class="fence-label" x="279" y="30" text-anchor="middle">escopo autorizado</text>
-        <path id="scent" class="scent" d="M24 236 C110 236 96 96 184 104 S300 150 328 120" fill="none" />
-        <circle class="faro" cx="24" cy="236" r="8" />
-        <circle class="wp" cx="184" cy="104" r="4.5" />
-        <path class="detour" d="M184 104 C170 170 150 200 150 236" fill="none" />
-        <g class="blocked">
-          <circle cx="150" cy="250" r="12" fill="none" />
-          <line x1="143" y1="243" x2="157" y2="257" />
-          <line x1="157" y1="243" x2="143" y2="257" />
-        </g>
-        <g class="verified">
-          <circle class="lens" cx="292" cy="186" r="22" />
-          <line class="lens-handle" x1="308" y1="202" x2="322" y2="216" />
-          <path d="M283 186 l6 6 l11 -13" fill="none" />
-        </g>
-        <circle class="runner" r="5" />
-      </svg>
-    </div>
+
+    <figure class="monitor" aria-label="Ilustração: um computador antigo rodando o scopehound numa área de trabalho estilo Windows 95">
+      <div class="case">
+        <div class="bezel">
+          <div class="screen">
+            <div class="desktop">
+              <ul class="icons" aria-hidden="true">
+                <li><i class="px" data-px="computer"></i><span>Meu escopo</span></li>
+                <li><i class="px" data-px="folder"></i><span>Pistas</span></li>
+                <li><i class="px" data-px="bin"></i><span>Bloqueados</span></li>
+              </ul>
+
+              <div class="win w-main">
+                <div class="title"><span>scopehound.exe — chat lab</span><b class="ctl" aria-hidden="true"><i>_</i><i>□</i><i>×</i></b></div>
+                <div class="menu" aria-hidden="true"><span><u>A</u>rquivo</span><span><u>T</u>arefa</span><span><u>M</u>odo: smart</span><span>A<u>j</u>uda</span></div>
+                <pre class="term" id="term" aria-live="off"></pre>
+              </div>
+
+              <div class="win w-leads">
+                <div class="title"><span>pistas.txt</span><b class="ctl" aria-hidden="true"><i>_</i><i>×</i></b></div>
+                <ul class="leads" id="leads">
+                  <li><b>[LOW]</b> CSP ausente em /</li>
+                  <li><b>[MED]</b> enumeração em /login</li>
+                </ul>
+              </div>
+
+              <div class="win w-dialog" id="dialog" hidden>
+                <div class="title"><span>Aprovação necessária</span><b class="ctl" aria-hidden="true"><i>×</i></b></div>
+                <div class="dlg-body">
+                  <i class="px" data-px="warn" aria-hidden="true"></i>
+                  <p>O agente quer executar:<br><code>send_request PUT /api/BasketItems/7</code><br>Impacto: <b>intrusive</b></p>
+                </div>
+                <div class="dlg-btns">
+                  <span class="btn95 tiny default" id="approve">Aprovar</span>
+                  <span class="btn95 tiny">Na sessão</span>
+                  <span class="btn95 tiny">Rejeitar</span>
+                </div>
+              </div>
+
+              <div class="yard" aria-hidden="true">
+                <span class="fence l"></span>
+                <span class="trail" id="trail"></span>
+                <i class="px hound" data-px="hound" id="hound"></i>
+                <span class="fence r"></span>
+                <span class="yard-label">escopo</span>
+              </div>
+            </div>
+
+            <div class="taskbar" aria-hidden="true">
+              <span class="start"><i class="px" data-px="hound"></i>Iniciar</span>
+              <span class="task on">scopehound.exe</span>
+              <span class="task">pistas.txt</span>
+              <span class="tray" id="clock">00:00</span>
+            </div>
+            <div class="scan" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="plate">
+          <span class="badge"><i class="px" data-px="hound" aria-hidden="true"></i>SCOPEHOUND 95</span>
+          <span class="vents" aria-hidden="true"></span>
+          <span class="led" aria-hidden="true"></span>
+        </div>
+      </div>
+      <div class="neck" aria-hidden="true"></div>
+      <div class="base" aria-hidden="true"></div>
+    </figure>
+    <div class="ground" aria-hidden="true"></div>
   </section>
 
-  <section class="band" id="como">
-    <div class="section-head">
-      <span class="kicker">01 · o método</span>
+  <section class="sec" id="metodo">
+    <header class="sec-head">
+      <p class="kicker">01 · o método</p>
       <h2>O modelo pede. A política decide. A ferramenta executa.</h2>
-      <p>A cada passo, uma camada de <em>guardrails</em> separada do modelo valida escopo, DNS, orçamento e permissão antes de qualquer requisição sair. É a mesma ideia do Burp AT: a regra não mora no prompt.</p>
-    </div>
-    <div class="flow">
-      <div class="flow-node"><span class="n">agente</span><p>forma hipóteses e pede uma ferramenta</p></div>
-      <div class="flow-arrow" aria-hidden="true">→</div>
-      <div class="flow-node accent"><span class="n">política</span><p>passa, pergunta ou nega — Ask / Act</p></div>
-      <div class="flow-arrow" aria-hidden="true">→</div>
-      <div class="flow-node"><span class="n">ferramentas</span><p>só o que foi permitido, pelo egress</p></div>
-    </div>
-    <div class="guardrail-strip">
-      <span>escopo</span><span>DNS pinning</span><span>orçamento</span><span>kill switch</span><span>rate limit</span><span>auditoria</span>
+      <p>A cada passo, uma camada de guardrails separada do modelo valida escopo, DNS, orçamento e permissão antes de qualquer requisição sair. É a mesma ideia do Burp AT: a regra não mora no prompt.</p>
+    </header>
+    <div class="win big">
+      <div class="title"><span>Painel de controle — Política</span><b class="ctl" aria-hidden="true"><i>_</i><i>□</i><i>×</i></b></div>
+      <div class="pane">
+        <ol class="flow">
+          <li><span class="step">1</span><strong>Agente</strong><p>forma hipóteses e pede uma ferramenta</p></li>
+          <li class="mid"><span class="step">2</span><strong>Política</strong><p>passa, pergunta ou nega — Ask / Act</p></li>
+          <li><span class="step">3</span><strong>Ferramentas</strong><p>só o que foi permitido, pelo egress</p></li>
+        </ol>
+        <fieldset class="group">
+          <legend>Guardrails (impostos fora do modelo)</legend>
+          <ul class="checks">
+            <li><span class="cb" aria-hidden="true"></span>Escopo</li>
+            <li><span class="cb" aria-hidden="true"></span>DNS pinning</li>
+            <li><span class="cb" aria-hidden="true"></span>Orçamento</li>
+            <li><span class="cb" aria-hidden="true"></span>Kill switch</li>
+            <li><span class="cb" aria-hidden="true"></span>Rate limit</li>
+            <li><span class="cb" aria-hidden="true"></span>Auditoria</li>
+          </ul>
+        </fieldset>
+        <div class="pane-btns"><span class="btn95 tiny default">OK</span><span class="btn95 tiny">Cancelar</span><span class="btn95 tiny">Aplicar</span></div>
+      </div>
     </div>
   </section>
 
-  <section class="features" id="recursos">
-    <div class="section-head">
-      <span class="kicker">02 · o faro</span>
+  <section class="sec" id="recursos">
+    <header class="sec-head">
+      <p class="kicker">02 · o faro</p>
       <h2>Tudo que um detetive precisa — dentro da cerca.</h2>
-    </div>
-    <div class="grid">
-      <article class="card">
-        <h3>Escopo que não se burla</h3>
-        <p>Host, porta, path e método autorizados. Conecta no IP já validado (DNS pinning), bloqueia metadados de nuvem e rede interna. Fora do escopo, nada sai.</p>
-      </article>
-      <article class="card">
-        <h3>Skills com metodologia</h3>
-        <p>IDOR, content discovery e race condition prontas. A skill carrega o roteiro e restringe as ferramentas àquele trabalho.</p>
-      </article>
-      <article class="card">
-        <h3>Contexto do caso</h3>
-        <p>Proxy de captura, importação de HAR e do XML do Burp, e um site map que normaliza <code>/api/users/{id}</code> e marca parâmetros numéricos.</p>
-      </article>
-      <article class="card">
-        <h3>Aprovações no seu ritmo</h3>
-        <p>Manual, Smart ou Autônomo. Aprovar uma vez, para a sessão, sempre, rejeitar ou redirecionar. A pausa sobrevive a reinícios.</p>
-      </article>
-      <article class="card">
-        <h3>/goal e subagentes</h3>
-        <p>Dê um objetivo e o agente o persegue por vários passos; para investigações amplas, divide o trabalho em subagentes com orçamento próprio.</p>
-      </article>
-      <article class="card">
-        <h3>Local ou servidor</h3>
-        <p>Rode na sua máquina com SQLite, ou suba para o time com Postgres, login via SSO, papéis e mascaramento de dados sensíveis.</p>
-      </article>
+    </header>
+    <div class="win big">
+      <div class="title"><span>Explorando — C:\scopehound\recursos</span><b class="ctl" aria-hidden="true"><i>_</i><i>□</i><i>×</i></b></div>
+      <div class="address"><span>Endereço</span><code>C:\scopehound\recursos</code></div>
+      <div class="files">
+        <article><i class="px" data-px="lock" aria-hidden="true"></i><h3>Escopo que não se burla</h3><p>Host, porta, path e método autorizados. Conecta no IP já validado (DNS pinning), bloqueia metadados de nuvem e rede interna. Fora do escopo, nada sai.</p></article>
+        <article><i class="px" data-px="book" aria-hidden="true"></i><h3>Skills com metodologia</h3><p>IDOR, content discovery e race condition prontas. A skill carrega o roteiro e restringe as ferramentas àquele trabalho.</p></article>
+        <article><i class="px" data-px="lens" aria-hidden="true"></i><h3>Contexto do caso</h3><p>Proxy de captura, importação de HAR e do XML do Burp, e um site map que normaliza <code>/api/users/{id}</code> e marca parâmetros numéricos.</p></article>
+        <article><i class="px" data-px="check" aria-hidden="true"></i><h3>Aprovações no seu ritmo</h3><p>Manual, Smart ou Autônomo. Aprovar uma vez, para a sessão, sempre, rejeitar ou redirecionar. A pausa sobrevive a reinícios.</p></article>
+        <article><i class="px" data-px="target" aria-hidden="true"></i><h3>/goal e subagentes</h3><p>Dê um objetivo e o agente o persegue por vários passos; para investigações amplas, divide o trabalho em subagentes com orçamento próprio.</p></article>
+        <article><i class="px" data-px="computer" aria-hidden="true"></i><h3>Local ou servidor</h3><p>Rode na sua máquina com SQLite, ou suba para o time com Postgres, login via SSO, papéis e mascaramento de dados sensíveis.</p></article>
+      </div>
+      <div class="status"><span>6 objeto(s)</span><span>Escopo: autorizado</span></div>
     </div>
   </section>
 
-  <section class="band terminal-band">
-    <div class="section-head">
-      <span class="kicker">03 · a pista</span>
+  <section class="sec" id="pista">
+    <header class="sec-head">
+      <p class="kicker">03 · a pista</p>
       <h2>Uma pista só vira achado quando a prova bate.</h2>
       <p>O agente registra leads e reexecuta a prova de conceito para confirmar. Nada de achado sem evidência reproduzível.</p>
-    </div>
-    <div class="terminal" role="img" aria-label="Transcrição de uma sessão do scopehound no terminal">
-      <div class="term-head"><span></span><span></span><span></span><em>scopehound chat lab</em></div>
-      <pre><code><span class="u">você ›</span> mapeie a API e procure IDOR
-<span class="a">scopehound ›</span> Vou começar pela listagem de cestas.
-  <span class="muted">↳ send_request GET /rest/basket/6</span>
-<span class="warn">⚠ aprovação</span> replay_as · active — repetir como userB
-  <span class="muted">[o] aprovar  [s] na sessão  [r] rejeitar</span>
-<span class="u">você ›</span> o
-<span class="a">scopehound ›</span> userB leu a cesta de userA.
-  <span class="ok">✓ verificado</span> IDOR em /rest/basket/{id} <span class="muted">[HIGH]</span></code></pre>
+    </header>
+    <div class="win big">
+      <div class="title"><span>Prompt do MS-DOS — scopehound chat lab</span><b class="ctl" aria-hidden="true"><i>_</i><i>□</i><i>×</i></b></div>
+      <pre class="dos" role="img" aria-label="Transcrição de uma sessão do scopehound">C:\LAB&gt; scopehound chat lab --mode smart
+
+você › mapeie a API e procure IDOR
+scopehound › Vou começar pela listagem de cestas.
+  ↳ send_request GET /rest/basket/6
+  ↳ replay_as /rest/basket/6 como userB
+scopehound › userB leu a cesta de userA. Vou provar.
+  ↳ verify_finding GET /rest/basket/6 (esperado: 200 + "UserId":21)
+
+  [ OK ] VERIFICADO  IDOR em /rest/basket/{id}  [HIGH]
+
+C:\LAB&gt; <span class="caret"></span></pre>
     </div>
   </section>
 
-  <section class="band compare" id="burp">
-    <div class="section-head">
-      <span class="kicker">04 · a referência</span>
+  <section class="sec" id="burp">
+    <header class="sec-head">
+      <p class="kicker">04 · a referência</p>
       <h2>A lógica do Burp AT, para desenvolvimento local.</h2>
       <p>O time já usa o Burp AT. O scopehound traz a mesma arquitetura para fora do Burp — e roda também em servidor.</p>
-    </div>
-    <div class="compare-grid">
-      <div class="col"><span class="col-h">Burp AT</span>
-        <ul><li>Agente dentro do Burp Suite Pro</li><li>Escopo checado antes de agir</li><li>Manual / Smart / Autonomous</li><li>Banco de skills</li><li>Arquivo de projeto e Logger</li></ul>
+    </header>
+    <div class="pair">
+      <div class="win">
+        <div class="title"><span>burp_at.txt — Bloco de notas</span><b class="ctl" aria-hidden="true"><i>×</i></b></div>
+        <div class="menu" aria-hidden="true"><span><u>A</u>rquivo</span><span><u>E</u>ditar</span><span><u>P</u>esquisar</span></div>
+        <ul class="note">
+          <li>Agente dentro do Burp Suite Pro</li>
+          <li>Escopo checado antes de agir</li>
+          <li>Manual / Smart / Autonomous</li>
+          <li>Banco de skills</li>
+          <li>Arquivo de projeto e Logger</li>
+        </ul>
       </div>
-      <div class="col mine"><span class="col-h">scopehound</span>
-        <ul><li>Agente local ou em servidor, open source</li><li>Escopo imposto no egress, fora do modelo</li><li>Mesmos três modos de autonomia</li><li>Skills em arquivo, suas inclusive</li><li>Projeto em SQLite/Postgres com auditoria</li></ul>
+      <div class="win">
+        <div class="title"><span>scopehound.txt — Bloco de notas</span><b class="ctl" aria-hidden="true"><i>×</i></b></div>
+        <div class="menu" aria-hidden="true"><span><u>A</u>rquivo</span><span><u>E</u>ditar</span><span><u>P</u>esquisar</span></div>
+        <ul class="note">
+          <li>Agente local ou em servidor, open source</li>
+          <li>Escopo imposto no egress, fora do modelo</li>
+          <li>Mesmos três modos de autonomia</li>
+          <li>Skills em arquivo, suas inclusive</li>
+          <li>Projeto em SQLite/Postgres com auditoria</li>
+        </ul>
       </div>
     </div>
   </section>
 
-  <section class="start" id="comecar">
-    <div class="section-head center">
-      <span class="kicker">05 · ao trabalho</span>
+  <section class="sec" id="comecar">
+    <header class="sec-head">
+      <p class="kicker">05 · ao trabalho</p>
       <h2>Solte o farejador.</h2>
       <p>Python 3.12+ e <a href="https://docs.astral.sh/uv/">uv</a>. Aponte só para sistemas seus ou com autorização por escrito.</p>
-    </div>
-    <div class="steps">
-      <pre class="code-block"><code><span class="c"># instale e configure o escopo</span>
+    </header>
+    <div class="win big wizard">
+      <div class="title"><span>Assistente de instalação do scopehound</span><b class="ctl" aria-hidden="true"><i>×</i></b></div>
+      <div class="wiz">
+        <div class="wiz-side" aria-hidden="true"><i class="px" data-px="hound"></i></div>
+        <div class="wiz-main">
+          <h3>Bem-vindo ao assistente do scopehound</h3>
+          <p>Siga os passos abaixo para configurar o escopo e soltar o farejador no seu laboratório.</p>
+          <pre class="dos small"><span class="c">REM instale e configure o escopo</span>
 git clone https://github.com/saulofilho/scopehound
 cd scopehound &amp;&amp; uv sync
 cp scope.example.yaml scope.yaml
 
-<span class="c"># confira o alvo sem enviar nada</span>
+<span class="c">REM confira o alvo sem enviar nada</span>
 uv run scopehound check http://localhost:3000 -s scope.yaml
 
-<span class="c"># crie o projeto e converse com o agente</span>
+<span class="c">REM crie o projeto e converse com o agente</span>
 uv run scopehound project create lab -s scope.yaml
-uv run scopehound chat lab --mode smart</code></pre>
-    </div>
-    <div class="start-cta">
-      <a class="btn primary" href="https://github.com/saulofilho/scopehound">Ver no GitHub ↗</a>
-      <a class="btn" href="https://github.com/saulofilho/scopehound#readme">Ler a documentação</a>
+uv run scopehound chat lab --mode smart</pre>
+          <div class="pane-btns">
+            <a class="btn95 tiny" href="https://github.com/saulofilho/scopehound#readme">&lt; Ler a documentação</a>
+            <a class="btn95 tiny default" href="https://github.com/saulofilho/scopehound">Ver no GitHub &gt;</a>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
-  <aside class="authorized">
-    <strong>Uso autorizado apenas.</strong> O arquivo de escopo é o contrato: o que não está nele é bloqueado antes de qualquer I/O. Aponte o scopehound só para sistemas que você possui ou tem permissão escrita para testar.
-  </aside>
+  <section class="sec">
+    <div class="win alert" role="note">
+      <div class="title"><span>Aviso de segurança</span><b class="ctl" aria-hidden="true"><i>×</i></b></div>
+      <div class="dlg-body">
+        <i class="px" data-px="warn" aria-hidden="true"></i>
+        <p><b>Uso autorizado apenas.</b> O arquivo de escopo é o contrato: o que não está nele é bloqueado antes de qualquer I/O. Aponte o scopehound só para sistemas que você possui ou tem permissão escrita para testar.</p>
+      </div>
+      <div class="dlg-btns"><a class="btn95 tiny default" href="#comecar">OK</a></div>
+    </div>
+  </section>
 
 </main>
 
-<footer class="foot">
-  <div class="foot-brand">
-    <svg width="22" height="22" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="11" fill="none" stroke="var(--faro)" stroke-width="1.4" stroke-dasharray="1.5 5"/><circle cx="13" cy="13" r="3.4" fill="var(--faro)"/></svg>
-    <span>scopehound</span>
-  </div>
-  <p>O farejador que nunca sai do escopo. Open source, feito para trabalho de segurança autorizado.</p>
-  <nav class="foot-links">
+<footer class="taskbar foot">
+  <a class="start" href="#topo"><i class="px" data-px="hound" aria-hidden="true"></i>Iniciar</a>
+  <span class="task on">scopehound — o farejador que nunca sai do escopo</span>
+  <nav class="foot-links" aria-label="Links">
     <a href="https://github.com/saulofilho/scopehound">GitHub</a>
     <a href="https://github.com/saulofilho/scopehound#readme">Docs</a>
     <a href="https://portswigger.net/burp/burp-at">Burp AT</a>
   </nav>
+  <span class="tray" id="clock2">00:00</span>
 </footer>
 
 <script src="app.js"></script>

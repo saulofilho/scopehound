@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- Modelo da imagem de compartilhamento (docs/og.png, 1200x630).
+     Regenerar: sirva o repositório e tire um screenshot desta página em 1200x630,
+     por exemplo com Chrome headless: chrome --headless=new --window-size=1200,630
+     --screenshot=docs/og.png http://localhost:PORTA/scripts/og.html -->
+<html lang="pt-BR"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Pixelify+Sans:wght@600&family=Silkscreen&family=VT323&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;width:1200px;height:630px;background:#000;color:#fff;overflow:hidden}
+  body{position:relative;font-family:"IBM Plex Mono",monospace}
+  .stars{position:absolute;inset:0;background-image:
+    radial-gradient(1.5px 1.5px at 8% 14%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 46% 9%,#fff 50%,transparent 51%),
+    radial-gradient(1.5px 1.5px at 92% 12%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 58% 88%,#fff 50%,transparent 51%),
+    radial-gradient(1px 1px at 4% 80%,#fff 50%,transparent 51%)}
+  .copy{position:absolute;left:72px;top:96px;width:620px}
+  .kicker{display:inline-block;border:2px solid #fff;padding:7px 12px;font:14px/1 Silkscreen,monospace;letter-spacing:.08em}
+  h1{font:600 74px/1.02 "Pixelify Sans",monospace;margin:30px 0 22px}
+  p{font-size:21px;line-height:1.5;color:#b4b4b4;margin:0}
+  .url{position:absolute;left:72px;bottom:64px;font:28px/1 VT323,monospace}
+  .win{position:absolute;right:72px;top:150px;width:380px;background:#fff;color:#000;border:3px solid #000;outline:3px solid #fff}
+  .win::after{content:"";position:absolute;inset:0;transform:translate(12px,12px);z-index:-1;
+    background:#000 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2' height='2'%3E%3Crect width='1' height='1' fill='%23fff'/%3E%3Crect x='1' y='1' width='1' height='1' fill='%23fff'/%3E%3C/svg%3E");background-size:3px 3px}
+  .title{background:#000;color:#fff;font:13px/1 Silkscreen,monospace;padding:8px 10px;display:flex;justify-content:space-between}
+  .screen{background:#000;margin:14px;height:196px;display:grid;place-items:center;position:relative}
+  .screen svg{width:260px;height:141px}
+  .fence{position:absolute;bottom:14px;width:10px;height:70px;background:repeating-linear-gradient(0deg,#fff 0 7px,transparent 7px 13px)}
+  .status{border-top:2px solid #000;font-size:13px;padding:6px 10px}
+</style></head><body>
+<div class="stars"></div>
+<div class="copy">
+  <span class="kicker">PENTEST ASSISTIDO POR HUMANO</span>
+  <h1>O farejador que nunca sai do escopo.</h1>
+  <p>Agente de IA para pentest. Escopo e permissões vivem fora do modelo.</p>
+</div>
+<div class="url">C:\&gt; github.com/saulofilho/scopehound_</div>
+<div class="win">
+  <div class="title"><span>SCOPEHOUND.EXE</span><span>_ □ ×</span></div>
+  <div class="screen">
+    <span class="fence" style="left:14px"></span><span class="fence" style="right:14px"></span>
+    <svg viewBox="0 0 24 13" shape-rendering="crispEdges"><path fill="#fff" d="M22 0h1v1h-1zM21 1h1v1h-1zM21 2h1v1h-1zM8 3h14v1h-14zM3 4h2v1h-2zM7 4h15v1h-15zM2 5h20v1h-20zM1 6h2v1h-2zM4 6h18v1h-18zM1 7h5v1h-5zM7 7h15v1h-15zM0 8h6v1h-6zM7 8h14v1h-14zM0 9h2v1h-2zM4 9h2v1h-2zM8 9h1v1h-1zM10 9h1v1h-1zM18 9h1v1h-1zM20 9h1v1h-1zM4 10h2v1h-2zM8 10h1v1h-1zM10 10h1v1h-1zM18 10h1v1h-1zM20 10h1v1h-1zM8 11h1v1h-1zM10 11h1v1h-1zM18 11h1v1h-1zM20 11h1v1h-1zM7 12h2v1h-2zM10 12h2v1h-2zM17 12h2v1h-2zM20 12h2v1h-2z"/></svg>
+  </div>
+  <div class="status">escopo: autorizado · farejando…</div>
+</div>
+</body></html>

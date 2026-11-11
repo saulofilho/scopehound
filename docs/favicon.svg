@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="8" fill="#0d1017"/>
-  <circle cx="16" cy="16" r="10.5" fill="none" stroke="#f5a623" stroke-width="1.6" stroke-dasharray="1.6 4.6" stroke-linecap="round"/>
-  <circle cx="16" cy="16" r="3.6" fill="#f5a623"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <rect width="32" height="32" fill="#000"/>
+  <rect x="1" y="1" width="30" height="30" fill="none" stroke="#fff" stroke-width="2"/>
+  <path fill="#fff" d="M26 10h1v1h-1zM25 11h1v1h-1zM25 12h1v1h-1zM12 13h14v1h-14zM7 14h2v1h-2zM11 14h15v1h-15zM6 15h20v1h-20zM5 16h2v1h-2zM8 16h18v1h-18zM5 17h5v1h-5zM11 17h15v1h-15zM4 18h6v1h-6zM11 18h14v1h-14zM4 19h2v1h-2zM8 19h2v1h-2zM12 19h1v1h-1zM14 19h1v1h-1zM22 19h1v1h-1zM24 19h1v1h-1zM8 20h2v1h-2zM12 20h1v1h-1zM14 20h1v1h-1zM22 20h1v1h-1zM24 20h1v1h-1zM12 21h1v1h-1zM14 21h1v1h-1zM22 21h1v1h-1zM24 21h1v1h-1zM11 22h2v1h-2zM14 22h2v1h-2zM21 22h2v1h-2zM24 22h2v1h-2z"/>
 </svg>
