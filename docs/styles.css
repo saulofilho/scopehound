@@ -363,3 +363,9 @@ main > .sec { max-width: var(--largura); margin: 0 auto; padding: 120px 24px 0; 
 .lang-switch strong { background: var(--k); color: var(--w); font-weight: 400; }
 .lang-switch a { color: var(--k); text-decoration: none; }
 .lang-switch a:hover { background: var(--k); color: var(--w); }
+
+/* seção do minijogo: janela grande seguida de um par de janelas */
+.win.big + .pair { margin-top: 34px; }
+/* VT323 não tem os blocos █ ░ do jogo; Plex Mono mantém o mapa alinhado */
+.dos.game { font: 400 16px/1.25 var(--mono); }
+@media (max-width: 720px) { .dos.game { font-size: 12px; } }

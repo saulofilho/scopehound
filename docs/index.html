@@ -31,6 +31,7 @@
     <a href="#pista"><u>P</u>ista</a>
     <a href="#burp"><u>B</u>urp AT</a>
     <a href="#comecar"><u>C</u>omeçar</a>
+    <a href="#jogo"><u>J</u>ogo</a>
   </nav>
   <span class="lang-switch" aria-label="Idioma">
     <strong>PT</strong><a href="en/">EN</a>
@@ -256,6 +257,62 @@ uv run scopehound chat lab --mode smart</pre>
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="sec" id="jogo">
+    <header class="sec-head">
+      <p class="kicker">06 · fora da coleira</p>
+      <h2>Treine o faro sem sair do terminal.</h2>
+      <p><b>Fora da Coleira</b> é um minijogo com a mesma regra do agente: o que não está no escopo é bloqueado. Fareje os leads, decida as aprovações e entregue o relatório antes de o orçamento acabar. Ele vem junto com a CLI, e também tem uma versão para o navegador.</p>
+    </header>
+    <div class="win big">
+      <div class="title"><span>Prompt do MS-DOS — scopehound play</span><b class="ctl" aria-hidden="true"><i>_</i><i>□</i><i>×</i></b></div>
+      <pre class="dos game" role="img" aria-label="Tela do jogo Fora da Coleira no terminal: o farejador pede aprovação para uma ação">C:\SCOPEHOUND&gt; uv run scopehound play
+
+SCOPEHOUND · FORA DA COLEIRA   fase 2/4: api.lab
+
+█████████████       scope.yaml
+█···█·····@··         allowed_hosts: [api.lab]
+█·█·█·███·███         allowed_ports: [8080]
+█·█···█░░░░░█         exclude_paths: [/logout]
+ ·█████░
+ ··A··█░            orçamento   57
+                    advertência 0/3
+                    leads       2
+                    pontos      300
+
+O farejador pede aprovação: GET api.lab:8080/users?id=2 para testar IDOR
+
+aprovar? [y] sim  [n] não <span class="caret"></span></pre>
+    </div>
+    <div class="pair">
+      <div class="win">
+        <div class="title"><span>regras.txt — Bloco de notas</span><b class="ctl" aria-hidden="true"><i>×</i></b></div>
+        <ul class="note">
+          <li><b>@</b> é o farejador. O mapa aparece conforme você anda.</li>
+          <li><b>L</b> lead: +100. Colete todos e entregue o relatório em <b>E</b>.</li>
+          <li><b>░</b> fora do escopo: o guardrail bloqueia. 3 advertências revogam a autorização.</li>
+          <li><b>X</b> caminho excluído: derruba a sessão.</li>
+          <li><b>A</b> aprovação: confira o <code>scope.yaml</code> da fase. Aprovar algo fora dele reprova a auditoria.</li>
+          <li>Orçamento que sobrar vira bônus: +5 por passo.</li>
+        </ul>
+      </div>
+      <div class="win">
+        <div class="title"><span>como_jogar.txt — Bloco de notas</span><b class="ctl" aria-hidden="true"><i>×</i></b></div>
+        <ul class="note">
+          <li>Instale com <code>uv sync</code> e rode <code>uv run scopehound play</code>.</li>
+          <li>Sem dependências extras: usa o <code>curses</code> do Python.</li>
+          <li>Setas, WASD ou hjkl movem o farejador.</li>
+          <li><b>y</b> / <b>n</b> aprovam ou negam o pedido.</li>
+          <li><b>r</b> reinicia a fase, <b>Enter</b> avança, <b>q</b> sai.</li>
+          <li>4 fases, de <code>lab.local</code> a <code>*.lab</code>.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="pane-btns">
+      <a class="btn95 tiny" href="https://github.com/saulofilho/scopehound#minijogo-fora-da-coleira">&lt; Regras no README</a>
+      <a class="btn95 tiny default" href="game/">Jogar no navegador &gt;</a>
     </div>
   </section>
 

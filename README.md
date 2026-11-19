@@ -37,6 +37,7 @@ também **em servidor** (time, com login e projetos compartilhados, na Fase 5).
 12. [Configuração](#configuração)
 13. [Estrutura do projeto](#estrutura-do-projeto)
 14. [Desenvolvimento](#desenvolvimento)
+15. [Minijogo: Fora da Coleira](#minijogo-fora-da-coleira)
 
 ---
 
@@ -441,6 +442,7 @@ Nenhuma destas regras depende do modelo, e nenhum prompt as altera.
 | `scopehound run PROJETO --goal G [--fail-on SEV] [--sarif ARQ]` | Execução de CI (SARIF, exit code) |
 | `scopehound doctor [--project P]` | Testa a conexão com o LLM (provedor, modelo, credencial) |
 | `scopehound version` | Mostra a versão |
+| `scopehound play` | Abre o minijogo [Fora da Coleira](#minijogo-fora-da-coleira) no terminal |
 
 ## Referência da API
 
@@ -578,11 +580,13 @@ src/scopehound/
 ├── api/          FastAPI
 ├── web/          interface (HTML/CSS/JS, sem build)
 ├── chat.py       chat de terminal
+├── game/         minijogo de terminal (fases em levels.json)
 ├── secrets.py    criptografia de segredos
 ├── config.py     configuração
 └── cli.py        CLI
 deploy/           Dockerfile, docker-compose, .env de exemplo
 docs/PLANO.md     plano das fases
+docs/game/        minijogo na versão web
 tests/            testes (LLM roteirizado e alvo simulado; não gastam tokens)
 ```
 
@@ -607,3 +611,33 @@ Nova migração depois de alterar `store/models.py`:
 ```bash
 uv run python -c "from alembic import command; from scopehound.store.db import alembic_config; command.revision(alembic_config('sqlite:///.scopehound/scopehound.db'), message='descricao', autogenerate=True)"
 ```
+
+## Minijogo: Fora da Coleira
+
+Um minijogo sobre a ideia central do scopehound: farejar tudo sem nunca sair
+do escopo. Você conduz o farejador (`@`) por um mapa com névoa, coleta os
+leads (`L`) e entrega o relatório em `E`.
+
+- **`░` fora do escopo:** o guardrail bloqueia o passo, gasta orçamento e dá
+  uma advertência. Com 3 advertências, a autorização é revogada.
+- **`X` caminho excluído:** derruba a sessão.
+- **`A` aprovação:** o farejador pede para executar uma ação. Compare com o
+  `scope.yaml` da fase; aprovar algo fora do escopo reprova a auditoria.
+- **Pontos:** +100 por lead, +50 por decisão correta, −25 por advertência e
+  +5 por unidade de orçamento que sobrar.
+
+Há duas versões, com as mesmas 4 fases:
+
+```bash
+uv run scopehound play
+```
+
+- **Terminal:** `scopehound play` (curses, sem dependências extras). Setas,
+  WASD ou hjkl movem; `y`/`n` respondem aprovações; `r` reinicia; `q` sai.
+- **Web:** [saulofilho.github.io/scopehound/game/](https://saulofilho.github.io/scopehound/game/),
+  com direcional na tela para celular.
+
+As fases ficam em `src/scopehound/game/levels.json`, com uma cópia em
+`docs/game/levels.json`. Ao editar uma, copie para a outra: `tests/test_game.py`
+confere que as duas são iguais e que toda fase pode ser concluída dentro do
+orçamento.

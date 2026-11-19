@@ -37,6 +37,7 @@ It runs **local** (one analyst, on their own machine) and is designed to run
 13. [Configuration](#configuration)
 14. [Project layout](#project-layout)
 15. [Development](#development)
+16. [Mini-game: Fora da Coleira](#mini-game-fora-da-coleira)
 
 ---
 
@@ -441,6 +442,7 @@ None of these rules depend on the model, and no prompt changes them.
 | `scopehound serve [--host] [--port]` | Start the API (local mode binds 127.0.0.1 only) |
 | `scopehound run PROJECT --goal G [--fail-on SEV] [--sarif FILE]` | CI run (SARIF, exit code) |
 | `scopehound version` | Show the version |
+| `scopehound play` | Open the [Fora da Coleira](#mini-game-fora-da-coleira) mini-game in the terminal |
 
 ## API reference
 
@@ -519,6 +521,7 @@ src/scopehound/
 ├── store/        SQLAlchemy models and Alembic migrations
 ├── api/          FastAPI (api/auth.py: OIDC and roles)
 ├── web/          interface (HTML/CSS/JS, no build)
+├── game/         terminal mini-game (levels in levels.json)
 ├── i18n.py       UI language (pt/en)
 ├── redact.py     masking of data sent to the LLM
 ├── oob.py        OOB listener registry
@@ -529,6 +532,7 @@ src/scopehound/
 └── cli.py        CLI
 deploy/           Dockerfile, docker-compose, sample .env
 docs/PLANO.md     phase plan (Portuguese)
+docs/game/        web version of the mini-game
 tests/            tests (scripted LLM and simulated target; spend no tokens)
 ```
 
@@ -550,3 +554,34 @@ New migration after changing `store/models.py`:
 ```bash
 uv run python -c "from alembic import command; from scopehound.store.db import alembic_config; command.revision(alembic_config('sqlite:///.scopehound/scopehound.db'), message='description', autogenerate=True)"
 ```
+
+## Mini-game: Fora da Coleira
+
+A mini-game ("Off the Leash") built on scopehound's core idea: sniff out
+everything, never leave scope. You guide the hound (`@`) through a fogged map,
+collect the leads (`L`) and deliver the report at `E`. The game text is in
+Portuguese.
+
+- **`░` out of scope:** the guardrail blocks the step, spends budget and adds a
+  strike. Three strikes and your authorization is revoked.
+- **`X` excluded path:** drops the session.
+- **`A` approval:** the hound asks to run an action. Check it against the
+  level's `scope.yaml`; approving something out of scope fails the audit.
+- **Score:** +100 per lead, +50 per correct decision, −25 per strike and +5
+  per unit of budget left.
+
+There are two versions, sharing the same 4 levels:
+
+```bash
+uv run scopehound play
+```
+
+- **Terminal:** `scopehound play` (curses, no extra dependencies). Arrows,
+  WASD or hjkl move; `y`/`n` answer approvals; `r` restarts; `q` quits.
+- **Web:** [saulofilho.github.io/scopehound/game/](https://saulofilho.github.io/scopehound/game/),
+  with an on-screen d-pad for phones.
+
+Levels live in `src/scopehound/game/levels.json`, with a copy in
+`docs/game/levels.json`. When you edit one, copy it to the other:
+`tests/test_game.py` checks that both match and that every level can be
+finished within its budget.

@@ -31,6 +31,7 @@
     <a href="#pista"><u>L</u>ead</a>
     <a href="#burp"><u>B</u>urp AT</a>
     <a href="#comecar"><u>S</u>tart</a>
+    <a href="#jogo"><u>G</u>ame</a>
   </nav>
   <span class="lang-switch" aria-label="Language">
     <a href="../">PT</a><strong>EN</strong>
@@ -256,6 +257,62 @@ uv run scopehound chat lab --mode smart</pre>
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="sec" id="jogo">
+    <header class="sec-head">
+      <p class="kicker">06 · off the leash</p>
+      <h2>Train your nose without leaving the terminal.</h2>
+      <p><b>Fora da Coleira</b> ("Off the Leash") is a mini-game with the agent's own rule: anything out of scope is blocked. Sniff out the leads, rule on the approvals and deliver the report before the budget runs out. It ships with the CLI, and there is a browser version too. The game text is in Portuguese.</p>
+    </header>
+    <div class="win big">
+      <div class="title"><span>MS-DOS Prompt — scopehound play</span><b class="ctl" aria-hidden="true"><i>_</i><i>□</i><i>×</i></b></div>
+      <pre class="dos game" role="img" aria-label="The Fora da Coleira game in the terminal: the hound asks for approval of an action">C:\SCOPEHOUND&gt; uv run scopehound play
+
+SCOPEHOUND · FORA DA COLEIRA   fase 2/4: api.lab
+
+█████████████       scope.yaml
+█···█·····@··         allowed_hosts: [api.lab]
+█·█·█·███·███         allowed_ports: [8080]
+█·█···█░░░░░█         exclude_paths: [/logout]
+ ·█████░
+ ··A··█░            orçamento   57
+                    advertência 0/3
+                    leads       2
+                    pontos      300
+
+O farejador pede aprovação: GET api.lab:8080/users?id=2 para testar IDOR
+
+aprovar? [y] sim  [n] não <span class="caret"></span></pre>
+    </div>
+    <div class="pair">
+      <div class="win">
+        <div class="title"><span>rules.txt — Notepad</span><b class="ctl" aria-hidden="true"><i>×</i></b></div>
+        <ul class="note">
+          <li><b>@</b> is the hound. The map reveals itself as you move.</li>
+          <li><b>L</b> lead: +100. Collect them all and deliver the report at <b>E</b>.</li>
+          <li><b>░</b> out of scope: the guardrail blocks it. 3 strikes revoke your authorization.</li>
+          <li><b>X</b> excluded path: drops the session.</li>
+          <li><b>A</b> approval: check the level's <code>scope.yaml</code>. Approving anything outside it fails the audit.</li>
+          <li>Leftover budget becomes a bonus: +5 per step.</li>
+        </ul>
+      </div>
+      <div class="win">
+        <div class="title"><span>how_to_play.txt — Notepad</span><b class="ctl" aria-hidden="true"><i>×</i></b></div>
+        <ul class="note">
+          <li>Install with <code>uv sync</code> and run <code>uv run scopehound play</code>.</li>
+          <li>No extra dependencies: it uses Python's <code>curses</code>.</li>
+          <li>Arrows, WASD or hjkl move the hound.</li>
+          <li><b>y</b> / <b>n</b> approve or deny the request.</li>
+          <li><b>r</b> restarts the level, <b>Enter</b> advances, <b>q</b> quits.</li>
+          <li>4 levels, from <code>lab.local</code> to <code>*.lab</code>.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="pane-btns">
+      <a class="btn95 tiny" href="https://github.com/saulofilho/scopehound/blob/main/README.en.md#mini-game-fora-da-coleira">&lt; Rules in the README</a>
+      <a class="btn95 tiny default" href="../game/">Play in the browser &gt;</a>
     </div>
   </section>
 
