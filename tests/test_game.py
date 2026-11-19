@@ -47,7 +47,7 @@ def test_levels_are_solvable_within_budget():
         # Leads e aprovações precisam ser visitados; caminho mínimo por força bruta.
         leads = _find(grid, LEAD)
         best = min(
-            sum(dists[a][b] for a, b in zip((start, *order), (*order, exit_)))
+            sum(dists[a][b] for a, b in zip((start, *order), (*order, exit_), strict=True))
             for order in permutations(leads)
         )
         assert best < lv["budget"], f"{lv['name']}: mínimo {best} >= orçamento {lv['budget']}"
@@ -55,8 +55,12 @@ def test_levels_are_solvable_within_budget():
 
 def test_out_of_scope_strikes_and_approval_rules():
     g = Game(
-        {"name": "t", "budget": 20, "map": ["######", "#S~A.#", "#.L.E#", "######"],
-         "asks": [{"t": "x", "ok": False}]}
+        {
+            "name": "t",
+            "budget": 20,
+            "map": ["######", "#S~A.#", "#.L.E#", "######"],
+            "asks": [{"t": "x", "ok": False}],
+        }
     )
     g.move(1, 0)
     assert g.strikes == 1 and g.pos == (1, 1)

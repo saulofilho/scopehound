@@ -62,7 +62,8 @@ class Game:
             self.strikes += 1
             self.score -= 25
             self.message = (
-                f"Bloqueado pelo guardrail: fora do escopo. Advertência {self.strikes}/{MAX_STRIKES}."
+                "Bloqueado pelo guardrail: fora do escopo. "
+                f"Advertência {self.strikes}/{MAX_STRIKES}."
             )
             if self.strikes >= MAX_STRIKES:
                 self._lose("Autorização revogada: tentativas demais fora do escopo.")
@@ -118,9 +119,18 @@ class Game:
 
 _GLYPH = {WALL: "█", OUT: "░", FLOOR: "·", " ": " "}
 _KEYS = {
-    "KEY_UP": (0, -1), "KEY_DOWN": (0, 1), "KEY_LEFT": (-1, 0), "KEY_RIGHT": (1, 0),
-    "w": (0, -1), "s": (0, 1), "a": (-1, 0), "d": (1, 0),
-    "k": (0, -1), "j": (0, 1), "h": (-1, 0), "l": (1, 0),
+    "KEY_UP": (0, -1),
+    "KEY_DOWN": (0, 1),
+    "KEY_LEFT": (-1, 0),
+    "KEY_RIGHT": (1, 0),
+    "w": (0, -1),
+    "s": (0, 1),
+    "a": (-1, 0),
+    "d": (1, 0),
+    "k": (0, -1),
+    "j": (0, 1),
+    "h": (-1, 0),
+    "l": (1, 0),
 }
 
 
