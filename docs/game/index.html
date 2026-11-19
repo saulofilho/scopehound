@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fora da Coleira · scopehound</title>
+<meta name="description" content="Minijogo do scopehound: fareje leads sem nunca sair do escopo." />
+<link rel="icon" href="../favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Pixelify+Sans:wght@500;700&family=VT323&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --k: #000; --w: #fff;
+    --chk: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2' height='2' shape-rendering='crispEdges'%3E%3Crect width='1' height='1'/%3E%3Crect x='1' y='1' width='1' height='1'/%3E%3C/svg%3E");
+    --dot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4' shape-rendering='crispEdges'%3E%3Crect width='1' height='1'/%3E%3Crect x='2' y='2' width='1' height='1'/%3E%3C/svg%3E");
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--w); color: var(--k); font: 16px/1.4 "IBM Plex Mono", ui-monospace, monospace; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font: 700 clamp(28px, 6vw, 44px)/1 "Pixelify Sans", monospace; margin: 0 0 4px; }
+  .sub { margin: 0 0 20px; }
+  .sub a { color: inherit; }
+  .win { border: 2px solid var(--k); box-shadow: 4px 4px 0 var(--k); }
+  .bar { background: var(--k); color: var(--w); font: 500 15px "Pixelify Sans", monospace; padding: 4px 10px; display: flex; justify-content: space-between; gap: 12px; }
+  .body { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; padding: 16px; }
+  @media (max-width: 720px) { .body { grid-template-columns: 1fr; } }
+  #map { display: grid; border: 2px solid var(--k); font: 22px/1 "VT323", monospace; user-select: none; }
+  .t { aspect-ratio: 1; display: grid; place-items: center; min-width: 0; }
+  .wall { background: var(--k); }
+  .fog { background: var(--dot); background-size: 12px 12px; }
+  .out { background: var(--chk); background-size: 4px 4px; }
+  .floor { color: #888; }
+  .dog { background: var(--k); color: var(--w); }
+  .lead, .exit { outline: 2px solid var(--k); outline-offset: -4px; font-weight: 600; }
+  .ask { border-radius: 50%; outline: 2px dashed var(--k); outline-offset: -4px; }
+  .trap { background: var(--k); color: var(--w); }
+  #scope { margin: 0 0 12px; padding: 8px; border: 2px solid var(--k); font-size: 13px; white-space: pre-wrap; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0 0 12px; }
+  dt { font-weight: 600; } dd { margin: 0; text-align: right; font: 22px/1 "VT323", monospace; }
+  .legend { font-size: 12px; margin: 0; }
+  #msg { min-height: 3em; padding: 10px 16px; border-top: 2px solid var(--k); margin: 0; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 16px; align-items: center; }
+  button { font: 500 15px "Pixelify Sans", monospace; background: var(--w); color: var(--k); border: 2px solid var(--k); box-shadow: 2px 2px 0 var(--k); padding: 6px 14px; cursor: pointer; }
+  button:active { transform: translate(2px, 2px); box-shadow: none; }
+  #ask { display: flex; gap: 8px; } #ask[hidden] { display: none; }
+  .pad { display: none; grid-template-columns: repeat(3, 48px); gap: 4px; margin: 12px auto 0; justify-content: center; }
+  .pad button { padding: 10px 0; }
+  @media (hover: none), (max-width: 720px) { .pad { display: grid; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Fora da Coleira</h1>
+  <p class="sub">Um minijogo do <a href="../">scopehound</a>. Fareje leads e entregue o relatório sem nunca sair do escopo.</p>
+  <section class="win" aria-label="Jogo">
+    <div class="bar"><span>FORA_DA_COLEIRA.EXE</span><span id="level"></span></div>
+    <div class="body">
+      <div>
+        <div id="map" role="img" aria-label="Mapa da fase"></div>
+        <div class="pad" aria-label="Direcional">
+          <span></span><button data-move="0,-1" aria-label="Cima">▲</button><span></span>
+          <button data-move="-1,0" aria-label="Esquerda">◀</button><button data-move="0,1" aria-label="Baixo">▼</button><button data-move="1,0" aria-label="Direita">▶</button>
+        </div>
+      </div>
+      <aside>
+        <pre id="scope"></pre>
+        <dl>
+          <dt>orçamento</dt><dd id="budget"></dd>
+          <dt>advertências</dt><dd id="strikes"></dd>
+          <dt>leads</dt><dd id="leads"></dd>
+          <dt>pontos</dt><dd id="score"></dd>
+        </dl>
+        <p class="legend">@ farejador · L lead · A aprovação · E relatório · X caminho excluído · ▒ fora do escopo</p>
+      </aside>
+    </div>
+    <p id="msg" aria-live="polite"></p>
+    <div class="actions">
+      <div id="ask" hidden><button id="yes">Aprovar [Y]</button><button id="no">Negar [N]</button></div>
+      <button id="next" hidden></button>
+      <button id="retry" hidden>Tentar de novo [R]</button>
+      <span class="legend">setas/WASD mover · R reiniciar</span>
+    </div>
+  </section>
+</main>
+<script src="game.js"></script>
+</body>
+</html>

@@ -357,6 +357,14 @@ def proxy(
 
 
 @app.command()
+def play() -> None:
+    """Minijogo: Fora da Coleira (fique no escopo)."""
+    from .game import play as run_game
+
+    run_game()
+
+
+@app.command()
 def skills() -> None:
     """List the available skills."""
     from .core import service as svc

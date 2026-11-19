@@ -1,0 +1,85 @@
+[
+  {
+    "name": "lab.local",
+    "intro": "Primeiro farejo. Colete os leads e entregue o relatório em E.",
+    "scope": ["allowed_hosts: [lab.local]", "allowed_ports: [80, 443]", "exclude_paths: []"],
+    "budget": 60,
+    "map": [
+      "###############",
+      "#S....#.......#",
+      "#.###.#.##L##.#",
+      "#...#...#.....#",
+      "###.#####.###.#",
+      "#L..~~~~#...#.#",
+      "#.###~~~#.#.#.#",
+      "#.....~~..#..E#",
+      "###############"
+    ],
+    "asks": []
+  },
+  {
+    "name": "api.lab",
+    "intro": "O farejador agora pede aprovações (A). Compare com o escopo antes de aprovar.",
+    "scope": ["allowed_hosts: [api.lab]", "allowed_ports: [8080]", "exclude_paths: [/logout]"],
+    "budget": 70,
+    "map": [
+      "#################",
+      "#S..#.....A...L.#",
+      "#.#.#.###.###.#.#",
+      "#.#...#~~~~~#.#.#",
+      "#.#####~~X~~#.#.#",
+      "#..A..#~~~~~#...#",
+      "###.#.#####.###.#",
+      "#L..#.......X..E#",
+      "#################"
+    ],
+    "asks": [
+      {"t": "GET api.lab:8080/users?id=2 para testar IDOR", "ok": true},
+      {"t": "Testar senha padrão em vpn.empresa.com:443", "ok": false}
+    ]
+  },
+  {
+    "name": "shop.lab",
+    "intro": "Caminhos excluídos (X) derrubam a sessão. Não pise neles.",
+    "scope": ["allowed_hosts: [shop.lab]", "allowed_cidrs: []", "exclude_paths: [/admin/delete]"],
+    "budget": 80,
+    "map": [
+      "###################",
+      "#S.....#~~~~#....L#",
+      "#.###..#~~~~#.###.#",
+      "#...#..A~~~~..#...#",
+      "###.####~~~~###.###",
+      "#L#.....X.......A.#",
+      "#.#.###########.#.#",
+      "#.....A...L.....#E#",
+      "###################"
+    ],
+    "asks": [
+      {"t": "Repetir POST shop.lab/checkout com quantidade negativa", "ok": true},
+      {"t": "Varrer 10.0.0.0/8 atrás de mais hosts", "ok": false},
+      {"t": "Chamar shop.lab/admin/delete para confirmar o IDOR", "ok": false}
+    ]
+  },
+  {
+    "name": "*.lab",
+    "intro": "Orçamento curto e um farejador empolgado. Ele vai tentar te convencer.",
+    "scope": ["allowed_hosts: ['*.lab']", "allowed_methods: [GET, POST]", "exclude_paths: [/backup*]"],
+    "budget": 62,
+    "map": [
+      "#####################",
+      "#S..~~~#.....#....L.#",
+      "#.#.~X~#.###.#.##.#.#",
+      "#.#.~~~..#L#...#..#.#",
+      "#.#.#####...####.##.#",
+      "#.A.........#...A...#",
+      "#.###.#.#####.#####.#",
+      "#...X.#.L.....A....E#",
+      "#####################"
+    ],
+    "asks": [
+      {"t": "Ler cookies de sessão de prod.empresa.com", "ok": false},
+      {"t": "Fuzzing de parâmetros em search.lab/q", "ok": true},
+      {"t": "Baixar files.lab/backup.sql", "ok": false}
+    ]
+  }
+]
