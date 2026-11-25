@@ -38,6 +38,7 @@ It runs **local** (one analyst, on their own machine) and is designed to run
 14. [Project layout](#project-layout)
 15. [Development](#development)
 16. [Mini-game: Fora da Coleira](#mini-game-fora-da-coleira)
+17. [Game: Hound.exe](#game-houndexe)
 
 ---
 
@@ -585,3 +586,24 @@ Levels live in `src/scopehound/game/levels.json`, with a copy in
 `docs/game/levels.json`. When you edit one, copy it to the other:
 `tests/test_game.py` checks that both match and that every level can be
 finished within its budget.
+
+## Game: Hound.exe
+
+[![The hound shooting the Ghost File under the Hound.exe logo](https://saulofilho.github.io/hound-exe/site/media/og.png)](https://saulofilho.github.io/hound-exe/)
+
+scopehound's hound now stars in a game of its own, in development and planned
+for Steam (Windows and Linux). **Hound.exe** is a 1-bit action metroidvania:
+the hound breaks into an infected computer, hunts bugs with a blaster and
+sniffs out what the system is hiding.
+
+- **Sniffing is the core mechanic:** it slows time, makes hidden files solid,
+  unearths clues and exposes the bugs' weak points.
+- **The first region is playable:** the Desktop, with 11 rooms, quarantines, a
+  top-down arena and a boss, the Ghost File.
+- **Made with Godot:** English and Portuguese, keyboard or gamepad, with
+  remappable controls.
+
+Website, trailer and screenshots at
+[saulofilho.github.io/hound-exe](https://saulofilho.github.io/hound-exe/). The
+code lives in a separate repository:
+[github.com/saulofilho/hound-exe](https://github.com/saulofilho/hound-exe).

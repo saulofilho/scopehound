@@ -38,6 +38,7 @@ também **em servidor** (time, com login e projetos compartilhados, na Fase 5).
 13. [Estrutura do projeto](#estrutura-do-projeto)
 14. [Desenvolvimento](#desenvolvimento)
 15. [Minijogo: Fora da Coleira](#minijogo-fora-da-coleira)
+16. [Jogo: Hound.exe](#jogo-houndexe)
 
 ---
 
@@ -641,3 +642,24 @@ As fases ficam em `src/scopehound/game/levels.json`, com uma cópia em
 `docs/game/levels.json`. Ao editar uma, copie para a outra: `tests/test_game.py`
 confere que as duas são iguais e que toda fase pode ser concluída dentro do
 orçamento.
+
+## Jogo: Hound.exe
+
+[![O cão atira no Arquivo Fantasma sob o logo do Hound.exe](https://saulofilho.github.io/hound-exe/site/media/og.png)](https://saulofilho.github.io/hound-exe/)
+
+O farejador do scopehound virou protagonista de um jogo próprio, em
+desenvolvimento e planejado para a Steam (Windows e Linux). **Hound.exe** é um
+metroidvania de ação em pixel art 1-bit: o cão invade um computador infectado,
+caça bugs a tiro e fareja o que o sistema esconde.
+
+- **Farejar é a mecânica central:** desacelera o tempo, materializa arquivos
+  ocultos, desenterra pistas e mostra o ponto fraco dos bugs.
+- **A primeira região está jogável:** a Área de trabalho, com 11 salas,
+  quarentenas, um trecho em visão de cima e o chefe, o Arquivo Fantasma.
+- **Feito com Godot:** português e inglês, teclado ou controle, com botões
+  remapeáveis.
+
+Site, trailer e capturas em
+[saulofilho.github.io/hound-exe](https://saulofilho.github.io/hound-exe/). O
+código fica em um repositório separado:
+[github.com/saulofilho/hound-exe](https://github.com/saulofilho/hound-exe).
